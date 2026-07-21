@@ -19,30 +19,30 @@
   "contributes": {
     "commands": [
       {
-        "command": "configEditor.open",
-        "title": "Open in Config Editor",
-        "category": "Config Editor"
+        "command": "jsonConfigEditor.open",
+        "title": "Open in JSON Config Editor",
+        "category": "JSON Config Editor"
       }
     ],
     "menus": {
       "editor/title": [
         {
           "when": "resourceLangId == json || resourceLangId == jsonc",
-          "command": "configEditor.open",
+          "command": "jsonConfigEditor.open",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
           "when": "resourceExtname == .json",
-          "command": "configEditor.open",
+          "command": "jsonConfigEditor.open",
           "group": "navigation"
         }
       ]
     },
     "customEditors": [
       {
-        "viewType": "configEditor.visual",
+        "viewType": "jsonConfigEditor.visual",
         "displayName": "Config Editor (Visual)",
         "selector": [
           {
@@ -56,7 +56,8 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "dev": "npm run compile && vsce package && code --install-extension json-config-editor-*.vsix --force"
   },
   "devDependencies": {
     "@types/vscode": "^1.80.0",

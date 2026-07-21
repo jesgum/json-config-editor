@@ -6,14 +6,14 @@ export function activate(ctx: vscode.ExtensionContext) {
 
   ctx.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
-      "configEditor.visual",
+      "jsonConfigEditor.visual",
       provider,
       { webviewOptions: { retainContextWhenHidden: true } }
     )
   );
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("configEditor.open", async (uri?: vscode.Uri) => {
+    vscode.commands.registerCommand("jsonConfigEditor.open", async (uri?: vscode.Uri) => {
       const target = uri ?? vscode.window.activeTextEditor?.document.uri;
       if (!target) {
         vscode.window.showWarningMessage("Open a JSON file first.");
@@ -30,7 +30,7 @@ export function activate(ctx: vscode.ExtensionContext) {
       await vscode.commands.executeCommand(
         "vscode.openWith",
         target,
-        "configEditor.visual"
+        "jsonConfigEditor.visual"
       );
     })
   );
@@ -126,7 +126,7 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
 <body>
   <header>
     <div class="brand">
-      <div class="t">config editor</div>
+      <div class="t">JSON Config Editor</div>
       <div class="s">tree view for nested JSON</div>
     </div>
     <input id="search" type="search" placeholder="filter top-level keys…"/>

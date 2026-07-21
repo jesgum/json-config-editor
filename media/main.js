@@ -3,7 +3,7 @@
 
   let DATA = null;
   let editTimer = null;
-  let pendingEdit = false;   // true while we're waiting for our own edit to echo back
+  let pendingEdit = false;
   const mainEl = document.getElementById("main");
   const toastEl = document.getElementById("toast");
 
@@ -65,10 +65,6 @@
 
   /* ════════════════  open/closed state  ════════════════ */
 
-  /**
-   * Walk the DOM tree and collect the "path" attribute of every
-   * open <details> element so we can restore state after re-render.
-   */
   function collectOpenPaths() {
     const open = new Set();
     const root = document.getElementById("root");
@@ -84,8 +80,6 @@
     const root = document.getElementById("root");
     if (!root) return;
 
-    // We may need multiple passes because opening a node triggers
-    // lazy building of children, which creates deeper <details>.
     function onePass() {
       let opened = 0;
       root.querySelectorAll("details[data-path]").forEach((d) => {
@@ -97,18 +91,17 @@
       });
       return opened;
     }
-    // A few passes to handle lazily-built deeper nodes
     onePass();
     setTimeout(() => { onePass(); setTimeout(() => onePass(), 30); }, 10);
   }
 
   /* ════════════════  renderers  ════════════════ */
 
-  function renderLeafRow(container, key, path) {
+  function renderLeafRow(container, key, path, depth) {
     const row = document.createElement("div");
     row.className = "row";
     const label = document.createElement("div");
-    label.className = "key";
+    label.className = "key depth-" + (depth % 5);
     label.textContent = key;
     const input = document.createElement("input");
     input.type = "text";
@@ -125,17 +118,20 @@
     return path.join(".");
   }
 
-  function renderPrimitiveArray(container, key, path, arr) {
+  function renderPrimitiveArray(container, key, path, arr, depth) {
     const wrap = document.createElement("details");
     wrap.setAttribute("data-path", pathId(path));
+    wrap.classList.add("depth-" + (depth % 5));
     const summary = document.createElement("summary");
     summary.innerHTML =
-      '<span class="arrow">▸</span><span class="key">' +
+      '<span class="arrow">▸</span><span class="key leaf-key">' +
       esc(key) +
       '</span><span class="badge">' +
       arr.length +
       " items</span>";
     wrap.appendChild(summary);
+    wrap.classList.add("depth-" + (depth % 5));
+    wrap.classList.add("leaf-array");
 
     const body = document.createElement("div");
     body.className = "arrwrap";
@@ -166,9 +162,10 @@
     container.appendChild(wrap);
   }
 
-  function renderMatrix(container, key, path, def) {
+  function renderMatrix(container, key, path, def, depth) {
     const wrap = document.createElement("details");
     wrap.setAttribute("data-path", pathId(path));
+    wrap.classList.add("depth-" + (depth % 5));
     wrap.open = true;
     const rows = def.labels_rows,
       cols = def.labels_cols;
@@ -235,6 +232,7 @@
   function renderObject(container, key, path, obj, depth) {
     const wrap = document.createElement("details");
     wrap.setAttribute("data-path", pathId(path));
+    wrap.classList.add("depth-" + (depth % 5));
     const n = countChildren(obj);
 
     const summary = document.createElement("summary");
@@ -270,13 +268,14 @@
 
   function renderEntry(container, key, path, value, depth) {
     if (typeof value === "string" || typeof value === "number") {
-      renderLeafRow(container, key, path);
+      renderLeafRow(container, key, path, depth); 
     } else if (Array.isArray(value)) {
       if (value.length === 0 || isPrimitiveArray(value)) {
-        renderPrimitiveArray(container, key, path, value);
+        renderPrimitiveArray(container, key, path, value, depth);
       } else {
         const wrap = document.createElement("details");
         wrap.setAttribute("data-path", pathId(path));
+        wrap.classList.add("depth-" + (depth % 5));
         const summary = document.createElement("summary");
         summary.innerHTML =
           '<span class="arrow">▸</span><span class="key">' +
@@ -300,16 +299,15 @@
         container.appendChild(wrap);
       }
     } else if (isMatrixDef(value)) {
-      renderMatrix(container, key, path, value);
+      renderMatrix(container, key, path, value, depth);
     } else if (isPlainObject(value)) {
       renderObject(container, key, path, value, depth);
     } else {
-      renderLeafRow(container, key, path);
+      renderLeafRow(container, key, path, depth);
     }
   }
 
   function renderRoot(preserveState) {
-    // Save which nodes are open before destroying the DOM
     let openPaths = null;
     if (preserveState) {
       openPaths = collectOpenPaths();
@@ -318,7 +316,7 @@
     mainEl.innerHTML = "";
     if (DATA === null) {
       mainEl.innerHTML =
-        '<div class="loadbox"><p style="color:var(--dim)">Waiting for data…</p></div>';
+        '<div class="loadbox"><p style="color:var(--vscode-descriptionForeground)">Waiting for data…</p></div>';
       return;
     }
     if (typeof DATA !== "object" || Array.isArray(DATA)) {
@@ -338,7 +336,6 @@
     keys.forEach((k) => renderEntry(root, k, [k], DATA[k], 0));
     mainEl.appendChild(root);
 
-    // Restore open/closed state
     if (openPaths && openPaths.size > 0) {
       restoreOpenPaths(openPaths);
     }
@@ -385,7 +382,6 @@
     const msg = event.data;
     if (msg.type !== "update") return;
 
-    // If this update is just our own edit echoing back, skip the re-render
     if (pendingEdit) {
       pendingEdit = false;
       return;
@@ -401,12 +397,12 @@
     }
     try {
       DATA = JSON.parse(text);
-      renderRoot(true);  // true = preserve open/closed state
+      renderRoot(true);
     } catch (e) {
       DATA = null;
       mainEl.innerHTML =
         '<div class="loadbox"><h2>⚠ Invalid JSON</h2>' +
-        '<p style="color:var(--danger)">' +
+        '<p style="color:var(--vscode-errorForeground)">' +
         esc(e.message) +
         "</p></div>";
     }

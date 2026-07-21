@@ -14,6 +14,9 @@ vsce package
 ```
 
 ### Install
+In VS Code: Extensions panel → ··· → Install from VSIX
+Or via terminal:
+
 ```bash
 code --install-extension json-config-editor-*.vsix
 ```
