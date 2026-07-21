@@ -11,3 +11,7 @@ cd json-config-editor
 npm install
 npm run compile
 vsce package
+
+### Install
+```bash
+code --install-extension json-config-editor-*.vsix
