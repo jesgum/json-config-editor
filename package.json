@@ -4,6 +4,7 @@
   "description": "Tree-view editor for large nested JSON configs",
   "version": "0.0.1",
   "publisher": "jesgum",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/jesgum/json-config-editor"
