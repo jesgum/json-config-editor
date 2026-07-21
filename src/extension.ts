@@ -20,17 +20,21 @@ export function activate(ctx: vscode.ExtensionContext) {
         return;
       }
 
+      // Remember the column before closing
+      const column = vscode.window.activeTextEditor?.viewColumn;
+
       // Close the current editor if it has the same file open
       const activeEditor = vscode.window.activeTextEditor;
       if (activeEditor && activeEditor.document.uri.toString() === target.toString()) {
         await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
       }
 
-      // Open with the custom editor in the same column
+      // Open with the custom editor in the saved column
       await vscode.commands.executeCommand(
         "vscode.openWith",
         target,
-        "jsonConfigEditor.visual"
+        "jsonConfigEditor.visual",
+        column ?? vscode.ViewColumn.Active
       );
     })
   );
