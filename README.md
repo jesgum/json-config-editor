@@ -6,7 +6,7 @@
 
 ### Build
 ```bash
-git clone https://github.com/your-name/json-config-editor.git
+git clone https://github.com/jesgum/json-config-editor.git
 cd json-config-editor
 npm install
 npm run compile
