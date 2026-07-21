@@ -13,17 +13,25 @@ export function activate(ctx: vscode.ExtensionContext) {
   );
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand("configEditor.open", (uri?: vscode.Uri) => {
+    vscode.commands.registerCommand("configEditor.open", async (uri?: vscode.Uri) => {
       const target = uri ?? vscode.window.activeTextEditor?.document.uri;
-      if (target) {
-        vscode.commands.executeCommand(
-          "vscode.openWith",
-          target,
-          "configEditor.visual"
-        );
-      } else {
+      if (!target) {
         vscode.window.showWarningMessage("Open a JSON file first.");
+        return;
       }
+
+      // Close the current editor if it has the same file open
+      const activeEditor = vscode.window.activeTextEditor;
+      if (activeEditor && activeEditor.document.uri.toString() === target.toString()) {
+        await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+      }
+
+      // Open with the custom editor in the same column
+      await vscode.commands.executeCommand(
+        "vscode.openWith",
+        target,
+        "configEditor.visual"
+      );
     })
   );
 }
