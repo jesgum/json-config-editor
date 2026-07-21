@@ -1,0 +1,13 @@
+.vscode/**
+src/**
+node_modules/**
+out/**
+.gitignore
+.gitattributes
+tsconfig.json
+webpack.config.js
+*.vsix
+**/*.ts
+**/*.map
+CHANGELOG.md
+LICENSE
