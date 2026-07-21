@@ -1,0 +1,114 @@
+:root {
+  --bg:        #0c1016;
+  --panel:     #131924;
+  --panel2:    #1a2230;
+  --line:      #263142;
+  --text:      #d8e1ec;
+  --dim:       #7c8ba1;
+  --key:       #7fd8c8;
+  --amber:     #e8a355;
+  --amber-dim: #6b5233;
+  --danger:    #d9736a;
+  --mono:      'IBM Plex Mono','SFMono-Regular',Menlo,Consolas,monospace;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+
+body{
+  margin:0; padding:0;
+  background:
+    radial-gradient(1200px 600px at 100% -10%,#142230 0%,transparent 60%),
+    var(--bg);
+  color:var(--text); font-family:var(--mono); font-size:13px;
+  display:flex; flex-direction:column;
+}
+
+/* ── header ── */
+header{
+  padding:14px 18px; border-bottom:1px solid var(--line);
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  background:linear-gradient(180deg,var(--panel),var(--bg));
+}
+.brand{display:flex;flex-direction:column;gap:2px;margin-right:6px}
+.brand .t{font-size:14px;letter-spacing:.06em;color:var(--text);font-weight:600}
+.brand .s{font-size:11px;color:var(--dim)}
+.brand .t::before{content:"▸ ";color:var(--amber)}
+
+/* ── inputs & buttons ── */
+input[type=text],input[type=search]{
+  background:var(--panel2);border:1px solid var(--line);color:var(--text);
+  padding:7px 10px;border-radius:4px;font-family:var(--mono);font-size:12px;outline:none;
+}
+input[type=text]:focus,input[type=search]:focus{border-color:var(--amber-dim)}
+#search{width:220px}
+
+button{
+  background:var(--panel2);border:1px solid var(--line);color:var(--text);
+  padding:7px 12px;border-radius:4px;font-family:var(--mono);font-size:12px;cursor:pointer;
+}
+button:hover{border-color:var(--amber-dim);color:#fff}
+button.primary{background:var(--amber-dim);border-color:var(--amber);color:#fff2e0}
+button.primary:hover{background:#7a5f3c}
+button.ghost{background:transparent}
+.spacer{flex:1}
+
+/* ── main ── */
+main{flex:1;overflow:auto;padding:16px 18px 60px;max-width:980px;margin:0 auto;width:100%}
+
+/* ── tree nodes ── */
+details{border-left:2px solid var(--line);margin:2px 0 2px 2px}
+details>summary{
+  list-style:none;cursor:pointer;padding:5px 8px;border-radius:4px;
+  display:flex;align-items:center;gap:8px;user-select:none;
+}
+details>summary::-webkit-details-marker{display:none}
+details>summary:hover{background:var(--panel2)}
+details>summary .arrow{color:var(--dim);width:10px;display:inline-block;transition:transform .12s}
+details[open]>summary .arrow{transform:rotate(90deg)}
+.key{color:var(--key)}
+.badge{
+  color:var(--dim);font-size:11px;background:var(--panel2);
+  border:1px solid var(--line);padding:1px 6px;border-radius:10px;
+}
+.children{padding-left:16px}
+
+/* ── leaf rows ── */
+.row{display:flex;align-items:center;gap:8px;padding:4px 8px 4px 26px}
+.row .key{min-width:230px;flex-shrink:0;overflow-wrap:anywhere}
+.row input[type=text]{flex:1}
+
+/* ── primitive arrays ── */
+textarea.arr{
+  width:100%;min-height:60px;background:var(--panel2);border:1px solid var(--line);
+  color:var(--text);font-family:var(--mono);font-size:12px;border-radius:4px;padding:8px;
+  resize:vertical;
+}
+.arrwrap{padding:6px 8px 10px 26px}
+.arrhint{color:var(--dim);font-size:11px;margin-top:4px}
+
+/* ── matrix tables ── */
+table.matrix{border-collapse:collapse;margin:6px 0 10px 26px}
+table.matrix th,table.matrix td{border:1px solid var(--line);padding:5px 8px;text-align:center}
+table.matrix th{color:var(--dim);font-weight:normal;background:var(--panel2)}
+table.matrix td.rowlabel{color:var(--key);text-align:left;background:var(--panel2)}
+table.matrix input[type=checkbox]{accent-color:var(--amber);width:15px;height:15px}
+table.matrix input[type=text]{width:60px;text-align:center}
+
+/* ── empty / error states ── */
+.loadbox{max-width:700px;margin:40px auto}
+.loadbox h2{font-size:15px;color:var(--text);font-weight:600}
+.loadbox p{color:var(--dim);line-height:1.5}
+
+/* ── toast ── */
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:var(--panel2);border:1px solid var(--amber);color:#fff2e0;
+  padding:8px 16px;border-radius:6px;font-size:12px;
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.toast.show{opacity:1}
+
+/* ── scrollbar ── */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}

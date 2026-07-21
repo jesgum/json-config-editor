@@ -1,0 +1,62 @@
+{
+  "name": "json-config-editor",
+  "displayName": "JSON Config Editor",
+  "description": "Tree-view editor for large nested JSON configs",
+  "version": "0.0.1",
+  "publisher": "jesgum",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "configEditor.open",
+        "title": "Open in Config Editor",
+        "category": "Config Editor"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceLangId == json || resourceLangId == jsonc",
+          "command": "configEditor.open",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .json",
+          "command": "configEditor.open",
+          "group": "navigation"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "configEditor.visual",
+        "displayName": "Config Editor (Visual)",
+        "selector": [
+          {
+            "filenamePattern": "*.json"
+          }
+        ],
+        "priority": "option"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^18.0.0",
+    "typescript": "^5.1.0"
+  }
+}
