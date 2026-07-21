@@ -1,10 +1,10 @@
 (function () {
-  // @ts-ignore
   const vscode = acquireVsCodeApi();
 
   let DATA = null;
   let editTimer = null;
-  const mainEl  = document.getElementById("main");
+  let pendingEdit = false;   // true while we're waiting for our own edit to echo back
+  const mainEl = document.getElementById("main");
   const toastEl = document.getElementById("toast");
 
   /* ════════════════  helpers  ════════════════ */
@@ -15,11 +15,11 @@
     setTimeout(() => toastEl.classList.remove("show"), 1400);
   }
 
-  /** debounced — pushes the full JSON back to the extension host */
   function notifyEdit() {
     clearTimeout(editTimer);
     editTimer = setTimeout(() => {
       if (DATA !== null) {
+        pendingEdit = true;
         vscode.postMessage({ type: "edit", text: JSON.stringify(DATA, null, 2) });
       }
     }, 500);
@@ -63,6 +63,45 @@
     return 0;
   }
 
+  /* ════════════════  open/closed state  ════════════════ */
+
+  /**
+   * Walk the DOM tree and collect the "path" attribute of every
+   * open <details> element so we can restore state after re-render.
+   */
+  function collectOpenPaths() {
+    const open = new Set();
+    const root = document.getElementById("root");
+    if (!root) return open;
+    root.querySelectorAll("details[data-path]").forEach((d) => {
+      if (d.open) open.add(d.getAttribute("data-path"));
+    });
+    return open;
+  }
+
+  function restoreOpenPaths(openSet) {
+    if (!openSet || openSet.size === 0) return;
+    const root = document.getElementById("root");
+    if (!root) return;
+
+    // We may need multiple passes because opening a node triggers
+    // lazy building of children, which creates deeper <details>.
+    function onePass() {
+      let opened = 0;
+      root.querySelectorAll("details[data-path]").forEach((d) => {
+        if (!d.open && openSet.has(d.getAttribute("data-path"))) {
+          d.open = true;
+          if (d._forceBuild) d._forceBuild();
+          opened++;
+        }
+      });
+      return opened;
+    }
+    // A few passes to handle lazily-built deeper nodes
+    onePass();
+    setTimeout(() => { onePass(); setTimeout(() => onePass(), 30); }, 10);
+  }
+
   /* ════════════════  renderers  ════════════════ */
 
   function renderLeafRow(container, key, path) {
@@ -82,8 +121,13 @@
     container.appendChild(row);
   }
 
+  function pathId(path) {
+    return path.join(".");
+  }
+
   function renderPrimitiveArray(container, key, path, arr) {
     const wrap = document.createElement("details");
+    wrap.setAttribute("data-path", pathId(path));
     const summary = document.createElement("summary");
     summary.innerHTML =
       '<span class="arrow">▸</span><span class="key">' +
@@ -124,6 +168,7 @@
 
   function renderMatrix(container, key, path, def) {
     const wrap = document.createElement("details");
+    wrap.setAttribute("data-path", pathId(path));
     wrap.open = true;
     const rows = def.labels_rows,
       cols = def.labels_cols;
@@ -189,6 +234,7 @@
 
   function renderObject(container, key, path, obj, depth) {
     const wrap = document.createElement("details");
+    wrap.setAttribute("data-path", pathId(path));
     const n = countChildren(obj);
 
     const summary = document.createElement("summary");
@@ -218,7 +264,7 @@
     wrap.addEventListener("toggle", () => {
       if (wrap.open) build();
     });
-    wrap._forceBuild = build; // used by "expand all"
+    wrap._forceBuild = build;
     container.appendChild(wrap);
   }
 
@@ -229,8 +275,8 @@
       if (value.length === 0 || isPrimitiveArray(value)) {
         renderPrimitiveArray(container, key, path, value);
       } else {
-        // array of objects — generic fallback
         const wrap = document.createElement("details");
+        wrap.setAttribute("data-path", pathId(path));
         const summary = document.createElement("summary");
         summary.innerHTML =
           '<span class="arrow">▸</span><span class="key">' +
@@ -258,11 +304,17 @@
     } else if (isPlainObject(value)) {
       renderObject(container, key, path, value, depth);
     } else {
-      renderLeafRow(container, key, path); // null / bool / fallback
+      renderLeafRow(container, key, path);
     }
   }
 
-  function renderRoot() {
+  function renderRoot(preserveState) {
+    // Save which nodes are open before destroying the DOM
+    let openPaths = null;
+    if (preserveState) {
+      openPaths = collectOpenPaths();
+    }
+
     mainEl.innerHTML = "";
     if (DATA === null) {
       mainEl.innerHTML =
@@ -285,6 +337,11 @@
     root.id = "root";
     keys.forEach((k) => renderEntry(root, k, [k], DATA[k], 0));
     mainEl.appendChild(root);
+
+    // Restore open/closed state
+    if (openPaths && openPaths.size > 0) {
+      restoreOpenPaths(openPaths);
+    }
   }
 
   /* ════════════════  toolbar  ════════════════ */
@@ -328,6 +385,12 @@
     const msg = event.data;
     if (msg.type !== "update") return;
 
+    // If this update is just our own edit echoing back, skip the re-render
+    if (pendingEdit) {
+      pendingEdit = false;
+      return;
+    }
+
     const text = msg.text;
     if (!text || !text.trim()) {
       DATA = null;
@@ -338,7 +401,7 @@
     }
     try {
       DATA = JSON.parse(text);
-      renderRoot();
+      renderRoot(true);  // true = preserve open/closed state
     } catch (e) {
       DATA = null;
       mainEl.innerHTML =
@@ -349,6 +412,5 @@
     }
   });
 
-  // tell the extension host we're ready
   vscode.postMessage({ type: "ready" });
 })();
