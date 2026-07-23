@@ -23,6 +23,7 @@
     "editor"
   ],
   "preview": false,
+  "icon": "media/icon.png",
   "main": "./out/extension.js",
   "activationEvents": [
     "onLanguage:json",
