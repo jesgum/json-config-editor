@@ -4,8 +4,6 @@ node_modules/**
 .gitignore
 .gitattributes
 tsconfig.json
-webpack.config.js
 *.vsix
 **/*.ts
 **/*.map
-CHANGELOG.md

@@ -2,7 +2,7 @@
   "name": "json-config-editor",
   "displayName": "JSON Config Editor",
   "description": "Tree-view editor for large nested JSON configs",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "jesgum",
   "license": "MIT",
   "repository": {
@@ -13,10 +13,20 @@
     "vscode": "^1.80.0"
   },
   "categories": [
+    "Visualization",
     "Other"
   ],
+  "keywords": [
+    "json",
+    "tree",
+    "config",
+    "editor"
+  ],
+  "preview": false,
   "main": "./out/extension.js",
   "activationEvents": [
+    "onLanguage:json",
+    "onLanguage:jsonc",
     "onCommand:jsonConfigEditor.open",
     "onCustomEditor:jsonConfigEditor.visual"
   ],
