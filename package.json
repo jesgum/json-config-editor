@@ -17,33 +17,22 @@
   ],
   "main": "./out/extension.js",
   "activationEvents": [
-    "onCommand:jsonConfigEditor.toggleOn",
-    "onCommand:jsonConfigEditor.toggleOff",
+    "onCommand:jsonConfigEditor.open",
     "onCustomEditor:jsonConfigEditor.visual"
   ],
   "contributes": {
     "commands": [
       {
-        "command": "jsonConfigEditor.toggleOn",
-        "title": "Toggle JSON Config Editor ON",
-        "category": "JSON Config Editor"
-      },
-      {
-        "command": "jsonConfigEditor.toggleOff",
-        "title": "Toggle JSON Config Editor OFF",
+        "command": "jsonConfigEditor.open",
+        "title": "Open JSON Config Editor",
         "category": "JSON Config Editor"
       }
     ],
     "menus": {
       "editor/title": [
         {
-          "when": "(resourceLangId == json || resourceLangId == jsonc || activeCustomEditorId == jsonConfigEditor.visual) && !jsonConfigEditor.isActive",
-          "command": "jsonConfigEditor.toggleOn",
-          "group": "navigation"
-        },
-        {
-          "when": "(resourceLangId == json || resourceLangId == jsonc || activeCustomEditorId == jsonConfigEditor.visual) && jsonConfigEditor.isActive",
-          "command": "jsonConfigEditor.toggleOff",
+          "when": "resourceLangId == json || resourceLangId == jsonc",
+          "command": "jsonConfigEditor.open",
           "group": "navigation"
         }
       ]
