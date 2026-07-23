@@ -7,6 +7,51 @@
   const mainEl = document.getElementById("main");
   const toastEl = document.getElementById("toast");
 
+  /* ════════════════  undo / redo  ════════════════ */
+
+  const undoStack = [];
+  const redoStack = [];
+  const MAX_HISTORY = 50;
+
+  function snapshot() {
+    return JSON.stringify(DATA);
+  }
+
+  function pushUndo() {
+    undoStack.push(snapshot());
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack.length = 0; // clear redo on new edit
+  }
+
+  function undo() {
+    if (!undoStack.length || DATA === null) return;
+    redoStack.push(snapshot());
+    DATA = JSON.parse(undoStack.pop());
+    renderRoot(true);
+    notifyEdit();
+    toast("Undo");
+  }
+
+  function redo() {
+    if (!redoStack.length || DATA === null) return;
+    undoStack.push(snapshot());
+    DATA = JSON.parse(redoStack.pop());
+    renderRoot(true);
+    notifyEdit();
+    toast("Redo");
+  }
+
+  document.addEventListener("keydown", (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key === "z" && !e.shiftKey) {
+      e.preventDefault();
+      undo();
+    } else if (mod && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+      e.preventDefault();
+      redo();
+    }
+  });
+
   /* ════════════════  helpers  ════════════════ */
 
   function toast(msg) {
@@ -23,6 +68,11 @@
         vscode.postMessage({ type: "edit", text: JSON.stringify(DATA, null, 2) });
       }
     }, 500);
+  }
+
+  /** Call before any mutation to DATA */
+  function beforeEdit() {
+    pushUndo();
   }
 
   function getAtPath(obj, path) {
@@ -106,7 +156,14 @@
     const input = document.createElement("input");
     input.type = "text";
     input.value = String(getAtPath(DATA, path) ?? "");
+    input.addEventListener("focus", () => {
+      input._before = input.value;
+    });
     input.addEventListener("input", () => {
+      if (input._snapshotted !== input._before) {
+        beforeEdit();
+        input._snapshotted = input._before;
+      }
       setAtPath(DATA, path, input.value);
       notifyEdit();
     });
@@ -144,6 +201,7 @@
         ta.className = "arr";
         ta.value = getAtPath(DATA, path).join(", ");
         ta.addEventListener("change", () => {
+          beforeEdit();
           const a = ta.value
             .split(",")
             .map((s) => s.trim())
@@ -205,6 +263,7 @@
           cb.type = "checkbox";
           cb.checked = val === "1";
           cb.addEventListener("change", () => {
+            beforeEdit();
             getAtPath(DATA, path).values[i][j] = cb.checked ? "1" : "0";
             notifyEdit();
           });
@@ -213,7 +272,14 @@
           const inp = document.createElement("input");
           inp.type = "text";
           inp.value = val;
+          inp.addEventListener("focus", () => {
+            inp._before = inp.value;
+          });
           inp.addEventListener("input", () => {
+            if (inp._snapshotted !== inp._before) {
+              beforeEdit();
+              inp._snapshotted = inp._before;
+            }
             getAtPath(DATA, path).values[i][j] = inp.value;
             notifyEdit();
           });
@@ -268,7 +334,7 @@
 
   function renderEntry(container, key, path, value, depth) {
     if (typeof value === "string" || typeof value === "number") {
-      renderLeafRow(container, key, path, depth); 
+      renderLeafRow(container, key, path, depth);
     } else if (Array.isArray(value)) {
       if (value.length === 0 || isPrimitiveArray(value)) {
         renderPrimitiveArray(container, key, path, value, depth);
@@ -397,6 +463,9 @@
     }
     try {
       DATA = JSON.parse(text);
+      // Clear history on external update
+      undoStack.length = 0;
+      redoStack.length = 0;
       renderRoot(true);
     } catch (e) {
       DATA = null;

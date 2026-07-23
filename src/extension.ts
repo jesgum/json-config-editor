@@ -1,8 +1,16 @@
 import * as vscode from "vscode";
 
+let toggleActive = false;
+let redirectDisposable: vscode.Disposable | undefined;
+let isRedirecting = false;
+
 /* ───────── activate ───────── */
 export function activate(ctx: vscode.ExtensionContext) {
   const provider = new ConfigEditorProvider(ctx);
+
+  // Restore toggle state from previous session
+  toggleActive = ctx.globalState.get<boolean>("jsonConfigEditor.active", false);
+  vscode.commands.executeCommand("setContext", "jsonConfigEditor.isActive", toggleActive);
 
   ctx.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
@@ -12,6 +20,7 @@ export function activate(ctx: vscode.ExtensionContext) {
     )
   );
 
+  // Explorer context menu — always available
   ctx.subscriptions.push(
     vscode.commands.registerCommand("jsonConfigEditor.open", async (uri?: vscode.Uri) => {
       const target = uri ?? vscode.window.activeTextEditor?.document.uri;
@@ -19,17 +28,11 @@ export function activate(ctx: vscode.ExtensionContext) {
         vscode.window.showWarningMessage("Open a JSON file first.");
         return;
       }
-
-      // Remember the column before closing
       const column = vscode.window.activeTextEditor?.viewColumn;
-
-      // Close the current editor if it has the same file open
       const activeEditor = vscode.window.activeTextEditor;
       if (activeEditor && activeEditor.document.uri.toString() === target.toString()) {
         await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
       }
-
-      // Open with the custom editor in the saved column
       await vscode.commands.executeCommand(
         "vscode.openWith",
         target,
@@ -38,6 +41,79 @@ export function activate(ctx: vscode.ExtensionContext) {
       );
     })
   );
+
+  // Toggle ON
+  ctx.subscriptions.push(
+    vscode.commands.registerCommand("jsonConfigEditor.toggleOn", async () => {
+      toggleActive = true;
+      ctx.globalState.update("jsonConfigEditor.active", true);
+      await vscode.commands.executeCommand("setContext", "jsonConfigEditor.isActive", true);
+      startRedirect(ctx);
+
+      // Redirect current editor immediately if it's a JSON text editor
+      const editor = vscode.window.activeTextEditor;
+      if (editor && isJsonFile(editor.document.uri)) {
+        await redirectToCustomEditor(editor);
+      }
+    })
+  );
+
+  // Toggle OFF
+  ctx.subscriptions.push(
+    vscode.commands.registerCommand("jsonConfigEditor.toggleOff", async () => {
+      toggleActive = false;
+      ctx.globalState.update("jsonConfigEditor.active", false);
+      await vscode.commands.executeCommand("setContext", "jsonConfigEditor.isActive", false);
+      stopRedirect();
+    })
+  );
+
+  // If toggle was ON from previous session, start listening
+  if (toggleActive) {
+    startRedirect(ctx);
+  }
+}
+
+/* ───────── toggle helpers ───────── */
+
+function isJsonFile(uri: vscode.Uri): boolean {
+  return uri.fsPath.endsWith(".json");
+}
+
+async function redirectToCustomEditor(editor: vscode.TextEditor) {
+  if (isRedirecting) { return; }
+  isRedirecting = true;
+  try {
+    const uri = editor.document.uri;
+    const column = editor.viewColumn;
+    await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+    await vscode.commands.executeCommand(
+      "vscode.openWith",
+      uri,
+      "jsonConfigEditor.visual",
+      column ?? vscode.ViewColumn.Active
+    );
+  } finally {
+    setTimeout(() => { isRedirecting = false; }, 500);
+  }
+}
+
+function startRedirect(ctx: vscode.ExtensionContext) {
+  if (redirectDisposable) { return; }
+  redirectDisposable = vscode.window.onDidChangeActiveTextEditor(async (editor) => {
+    if (!toggleActive || !editor || isRedirecting) { return; }
+    if (isJsonFile(editor.document.uri)) {
+      await redirectToCustomEditor(editor);
+    }
+  });
+  ctx.subscriptions.push(redirectDisposable);
+}
+
+function stopRedirect() {
+  if (redirectDisposable) {
+    redirectDisposable.dispose();
+    redirectDisposable = undefined;
+  }
 }
 
 /* ───────── CustomTextEditorProvider ───────── */
@@ -57,7 +133,6 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
     };
     panel.webview.html = this.html(panel.webview);
 
-    /* guards against echo: webview edit → doc change → webview re‑render */
     let skipNext = 0;
 
     const sendDoc = () =>
@@ -66,7 +141,6 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
         text: document.getText(),
       });
 
-    /* messages FROM the webview */
     const onMsg = panel.webview.onDidReceiveMessage(async (msg) => {
       if (msg.type === "ready") {
         sendDoc();
@@ -84,9 +158,8 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
       }
     });
 
-    /* external edits (another editor, git, etc.) → refresh the webview */
     const onDoc = vscode.workspace.onDidChangeTextDocument((e) => {
-      if (e.document.uri.toString() !== document.uri.toString()) return;
+      if (e.document.uri.toString() !== document.uri.toString()) { return; }
       if (skipNext > 0) {
         skipNext--;
         return;
@@ -99,10 +172,9 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
       onDoc.dispose();
     });
 
-    sendDoc(); // initial push
+    sendDoc();
   }
 
-  /* ── build HTML shell ── */
   private html(webview: vscode.Webview): string {
     const css = webview.asWebviewUri(
       vscode.Uri.joinPath(this.ctx.extensionUri, "media", "style.css")
