@@ -18,26 +18,41 @@
   }
 
   function pushUndo() {
-    undoStack.push(snapshot());
+    const current = Array.from(expandedPaths);
+    undoStack.push({ text: snapshot(), expanded: current });
     if (undoStack.length > MAX_HISTORY) undoStack.shift();
     redoStack.length = 0; // clear redo on new edit
   }
 
   function undo() {
     if (!undoStack.length || DATA === null) return;
-    redoStack.push(snapshot());
-    DATA = JSON.parse(undoStack.pop());
-    renderRoot(true);
-    notifyEdit();
+    const current = Array.from(expandedPaths);
+    redoStack.push({ text: snapshot(), expanded: current });
+    const state = undoStack.pop();
+    if (!state || !state.text) return;
+    DATA = JSON.parse(state.text);
+    expandedPaths.clear();
+    if (state.expanded && Array.isArray(state.expanded)) {
+      state.expanded.forEach((p) => expandedPaths.add(p));
+    }
+    renderRoot(false);
+    postEdit();
     toast("Undo");
   }
 
   function redo() {
     if (!redoStack.length || DATA === null) return;
-    undoStack.push(snapshot());
-    DATA = JSON.parse(redoStack.pop());
-    renderRoot(true);
-    notifyEdit();
+    const current = Array.from(expandedPaths);
+    undoStack.push({ text: snapshot(), expanded: current });
+    const state = redoStack.pop();
+    if (!state || !state.text) return;
+    DATA = JSON.parse(state.text);
+    expandedPaths.clear();
+    if (state.expanded && Array.isArray(state.expanded)) {
+      state.expanded.forEach((p) => expandedPaths.add(p));
+    }
+    renderRoot(false);
+    postEdit();
     toast("Redo");
   }
 
@@ -60,13 +75,16 @@
     setTimeout(() => toastEl.classList.remove("show"), 1400);
   }
 
+  function postEdit() {
+    if (DATA === null) return;
+    pendingEdit = true;
+    vscode.postMessage({ type: "edit", text: JSON.stringify(DATA, null, 2) });
+  }
+
   function notifyEdit() {
     clearTimeout(editTimer);
     editTimer = setTimeout(() => {
-      if (DATA !== null) {
-        pendingEdit = true;
-        vscode.postMessage({ type: "edit", text: JSON.stringify(DATA, null, 2) });
-      }
+      postEdit();
     }, 500);
   }
 
@@ -115,34 +133,49 @@
 
   /* ════════════════  open/closed state  ════════════════ */
 
-  function collectOpenPaths() {
-    const open = new Set();
-    const root = document.getElementById("root");
-    if (!root) return open;
-    root.querySelectorAll("details[data-path]").forEach((d) => {
-      if (d.open) open.add(d.getAttribute("data-path"));
-    });
-    return open;
-  }
+  const expandedPaths = new Set();
 
-  function restoreOpenPaths(openSet) {
-    if (!openSet || openSet.size === 0) return;
+  function collectOpenPaths() {
+    expandedPaths.clear();
     const root = document.getElementById("root");
     if (!root) return;
+    root.querySelectorAll("details[data-path]").forEach((d) => {
+      const path = d.getAttribute("data-path");
+      if (path && d.open) {
+        expandedPaths.add(path);
+      }
+    });
+  }
+
+  function rememberOpenState(wrap) {
+    const path = wrap.getAttribute("data-path");
+    if (!path) return;
+    if (wrap.open) {
+      expandedPaths.add(path);
+    } else {
+      expandedPaths.delete(path);
+    }
+  }
+
+  function restoreOpenState(root) {
+    if (!root || expandedPaths.size === 0) return;
 
     function onePass() {
-      let opened = 0;
+      let reopened = 0;
       root.querySelectorAll("details[data-path]").forEach((d) => {
-        if (!d.open && openSet.has(d.getAttribute("data-path"))) {
+        const path = d.getAttribute("data-path");
+        if (!path) return;
+        if (expandedPaths.has(path) && !d.open) {
           d.open = true;
           if (d._forceBuild) d._forceBuild();
-          opened++;
+          reopened++;
         }
       });
-      return opened;
+      return reopened;
     }
+
     onePass();
-    setTimeout(() => { onePass(); setTimeout(() => onePass(), 30); }, 10);
+    setTimeout(() => { onePass(); setTimeout(() => onePass(), 20); }, 10);
   }
 
   /* ════════════════  renderers  ════════════════ */
@@ -177,7 +210,8 @@
 
   function renderPrimitiveArray(container, key, path, arr, depth) {
     const wrap = document.createElement("details");
-    wrap.setAttribute("data-path", pathId(path));
+    const id = pathId(path);
+    wrap.setAttribute("data-path", id);
     wrap.classList.add("depth-" + (depth % 5));
     const summary = document.createElement("summary");
     summary.innerHTML =
@@ -194,29 +228,42 @@
     body.className = "arrwrap";
     let built = false;
 
+    function buildArrayBody() {
+      if (built) return;
+      built = true;
+      const ta = document.createElement("textarea");
+      ta.className = "arr";
+      ta.value = getAtPath(DATA, path).join(", ");
+      ta.addEventListener("change", () => {
+        beforeEdit();
+        const a = ta.value
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length);
+        setAtPath(DATA, path, a);
+        summary.querySelector(".badge").textContent = a.length + " items";
+        notifyEdit();
+      });
+      const hint = document.createElement("div");
+      hint.className = "arrhint";
+      hint.textContent = "comma-separated — edit and click away to save";
+      body.append(ta, hint);
+      wrap.appendChild(body);
+    }
+
+    const expanded = expandedPaths.has(id);
+    if (expanded) {
+      wrap.open = true;
+      buildArrayBody();
+    }
+
     wrap.addEventListener("toggle", () => {
-      if (wrap.open && !built) {
-        built = true;
-        const ta = document.createElement("textarea");
-        ta.className = "arr";
-        ta.value = getAtPath(DATA, path).join(", ");
-        ta.addEventListener("change", () => {
-          beforeEdit();
-          const a = ta.value
-            .split(",")
-            .map((s) => s.trim())
-            .filter((s) => s.length);
-          setAtPath(DATA, path, a);
-          summary.querySelector(".badge").textContent = a.length + " items";
-          notifyEdit();
-        });
-        const hint = document.createElement("div");
-        hint.className = "arrhint";
-        hint.textContent = "comma-separated — edit and click away to save";
-        body.append(ta, hint);
-        wrap.appendChild(body);
+      rememberOpenState(wrap);
+      if (wrap.open) {
+        buildArrayBody();
       }
     });
+    wrap._forceBuild = buildArrayBody;
     container.appendChild(wrap);
   }
 
@@ -292,12 +339,14 @@
 
     body.appendChild(table);
     wrap.appendChild(body);
+    wrap.addEventListener("toggle", () => rememberOpenState(wrap));
     container.appendChild(wrap);
   }
 
   function renderObject(container, key, path, obj, depth) {
+    const id = pathId(path);
     const wrap = document.createElement("details");
-    wrap.setAttribute("data-path", pathId(path));
+    wrap.setAttribute("data-path", id);
     wrap.classList.add("depth-" + (depth % 5));
     const n = countChildren(obj);
 
@@ -325,7 +374,14 @@
       wrap.appendChild(childrenEl);
     }
 
+    const expanded = expandedPaths.has(id);
+    if (expanded) {
+      wrap.open = true;
+      build();
+    }
+
     wrap.addEventListener("toggle", () => {
+      rememberOpenState(wrap);
       if (wrap.open) build();
     });
     wrap._forceBuild = build;
@@ -354,14 +410,27 @@
         childrenEl.className = "children";
         let built = false;
         wrap.addEventListener("toggle", () => {
+          rememberOpenState(wrap);
           if (wrap.open && !built) {
-            built = true;
-            value.forEach((v, i) =>
-              renderEntry(childrenEl, "[" + i + "]", path.concat(i), v, depth + 1)
-            );
-            wrap.appendChild(childrenEl);
+            buildChildren();
           }
         });
+        wrap._forceBuild = () => {
+          if (built) return;
+          buildChildren();
+        };
+        function buildChildren() {
+          built = true;
+          value.forEach((v, i) =>
+            renderEntry(childrenEl, "[" + i + "]", path.concat(i), v, depth + 1)
+          );
+          wrap.appendChild(childrenEl);
+        }
+        const expanded = expandedPaths.has(pathId(path));
+        if (expanded) {
+          wrap.open = true;
+          buildChildren();
+        }
         container.appendChild(wrap);
       }
     } else if (isMatrixDef(value)) {
@@ -379,10 +448,15 @@
       openPaths = collectOpenPaths();
     }
 
-    mainEl.innerHTML = "";
+    const fragment = document.createDocumentFragment();
     if (DATA === null) {
-      mainEl.innerHTML =
-        '<div class="loadbox"><p style="color:var(--vscode-descriptionForeground)">Waiting for data…</p></div>';
+      fragment.appendChild(document.createElement("div")).className = "loadbox";
+      const empty = document.createElement("div");
+      empty.className = "loadbox";
+      empty.innerHTML = '<p style="color:var(--vscode-descriptionForeground)">Waiting for data…</p>';
+      fragment.innerHTML = empty.outerHTML;
+      mainEl.innerHTML = "";
+      mainEl.appendChild(fragment);
       return;
     }
     if (typeof DATA !== "object" || Array.isArray(DATA)) {
@@ -400,11 +474,9 @@
     const root = document.createElement("div");
     root.id = "root";
     keys.forEach((k) => renderEntry(root, k, [k], DATA[k], 0));
+    restoreOpenState(root);
+    mainEl.innerHTML = "";
     mainEl.appendChild(root);
-
-    if (openPaths && openPaths.size > 0) {
-      restoreOpenPaths(openPaths);
-    }
   }
 
   /* ════════════════  toolbar  ════════════════ */
@@ -462,10 +534,14 @@
       return;
     }
     try {
-      DATA = JSON.parse(text);
-      // Clear history on external update
-      undoStack.length = 0;
-      redoStack.length = 0;
+      const nextData = JSON.parse(text);
+      const currentText = DATA === null ? null : JSON.stringify(DATA);
+      const nextText = JSON.stringify(nextData);
+      if (currentText !== null && currentText === nextText) {
+        return;
+      }
+
+      DATA = nextData;
       renderRoot(true);
     } catch (e) {
       DATA = null;

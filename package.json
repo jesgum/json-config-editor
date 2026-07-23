@@ -16,14 +16,13 @@
     "Other"
   ],
   "main": "./out/extension.js",
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:jsonConfigEditor.toggleOn",
+    "onCommand:jsonConfigEditor.toggleOff",
+    "onCustomEditor:jsonConfigEditor.visual"
+  ],
   "contributes": {
     "commands": [
-      {
-        "command": "jsonConfigEditor.open",
-        "title": "Open in JSON Config Editor",
-        "category": "JSON Config Editor"
-      },
       {
         "command": "jsonConfigEditor.toggleOn",
         "title": "Toggle JSON Config Editor ON",
@@ -45,13 +44,6 @@
         {
           "when": "(resourceLangId == json || resourceLangId == jsonc || activeCustomEditorId == jsonConfigEditor.visual) && jsonConfigEditor.isActive",
           "command": "jsonConfigEditor.toggleOff",
-          "group": "navigation"
-        }
-      ],
-      "explorer/context": [
-        {
-          "when": "resourceExtname == .json",
-          "command": "jsonConfigEditor.open",
           "group": "navigation"
         }
       ]

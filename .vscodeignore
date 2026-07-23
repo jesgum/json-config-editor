@@ -9,4 +9,3 @@ webpack.config.js
 **/*.ts
 **/*.map
 CHANGELOG.md
-LICENSE

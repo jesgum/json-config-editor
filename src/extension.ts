@@ -2,9 +2,8 @@ import * as vscode from "vscode";
 
 let toggleActive = false;
 let redirectDisposable: vscode.Disposable | undefined;
-let isRedirecting = false;
+let lastRedirectedUri: string | undefined;
 
-/* ───────── activate ───────── */
 export function activate(ctx: vscode.ExtensionContext) {
   const provider = new ConfigEditorProvider(ctx);
 
@@ -20,7 +19,7 @@ export function activate(ctx: vscode.ExtensionContext) {
     )
   );
 
-  // Explorer context menu — always available
+  // Keep a non-contributed fallback command for compatibility
   ctx.subscriptions.push(
     vscode.commands.registerCommand("jsonConfigEditor.open", async (uri?: vscode.Uri) => {
       const target = uri ?? vscode.window.activeTextEditor?.document.uri;
@@ -28,17 +27,11 @@ export function activate(ctx: vscode.ExtensionContext) {
         vscode.window.showWarningMessage("Open a JSON file first.");
         return;
       }
-      const column = vscode.window.activeTextEditor?.viewColumn;
-      const activeEditor = vscode.window.activeTextEditor;
-      if (activeEditor && activeEditor.document.uri.toString() === target.toString()) {
-        await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
+      if (!isJsonFile(target)) {
+        vscode.window.showWarningMessage("JSON Config Editor only works with .json files.");
+        return;
       }
-      await vscode.commands.executeCommand(
-        "vscode.openWith",
-        target,
-        "jsonConfigEditor.visual",
-        column ?? vscode.ViewColumn.Active
-      );
+      await redirectToCustomEditorFromUri(target);
     })
   );
 
@@ -74,35 +67,34 @@ export function activate(ctx: vscode.ExtensionContext) {
   }
 }
 
-/* ───────── toggle helpers ───────── */
-
 function isJsonFile(uri: vscode.Uri): boolean {
-  return uri.fsPath.endsWith(".json");
+  return uri.path.toLowerCase().endsWith(".json");
 }
 
 async function redirectToCustomEditor(editor: vscode.TextEditor) {
-  if (isRedirecting) { return; }
-  isRedirecting = true;
-  try {
-    const uri = editor.document.uri;
-    const column = editor.viewColumn;
-    await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
-    await vscode.commands.executeCommand(
-      "vscode.openWith",
-      uri,
-      "jsonConfigEditor.visual",
-      column ?? vscode.ViewColumn.Active
-    );
-  } finally {
-    setTimeout(() => { isRedirecting = false; }, 500);
+  await redirectToCustomEditorFromUri(editor.document.uri, editor.viewColumn);
+}
+
+async function redirectToCustomEditorFromUri(uri: vscode.Uri, viewColumn?: vscode.ViewColumn) {
+  const key = uri.toString();
+  if (lastRedirectedUri === key) {
+    return;
   }
+  lastRedirectedUri = key;
+  await vscode.commands.executeCommand(
+    "vscode.openWith",
+    uri,
+    "jsonConfigEditor.visual",
+    viewColumn ?? vscode.ViewColumn.Active
+  );
 }
 
 function startRedirect(ctx: vscode.ExtensionContext) {
   if (redirectDisposable) { return; }
-  redirectDisposable = vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-    if (!toggleActive || !editor || isRedirecting) { return; }
-    if (isJsonFile(editor.document.uri)) {
+  redirectDisposable = vscode.workspace.onDidOpenTextDocument(async (document) => {
+    if (!toggleActive || !isJsonFile(document.uri)) { return; }
+    const editor = vscode.window.visibleTextEditors.find((candidate) => candidate.document.uri.toString() === document.uri.toString());
+    if (editor) {
       await redirectToCustomEditor(editor);
     }
   });
@@ -114,6 +106,7 @@ function stopRedirect() {
     redirectDisposable.dispose();
     redirectDisposable = undefined;
   }
+  lastRedirectedUri = undefined;
 }
 
 /* ───────── CustomTextEditorProvider ───────── */
