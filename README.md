@@ -39,3 +39,5 @@ npm run compile
 
 ## License
 MIT
+
+Disclaimer: Everything in this project is created by AI.
