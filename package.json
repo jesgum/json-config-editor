@@ -27,9 +27,7 @@
   "main": "./out/extension.js",
   "activationEvents": [
     "onLanguage:json",
-    "onLanguage:jsonc",
-    "onCommand:jsonConfigEditor.open",
-    "onCustomEditor:jsonConfigEditor.visual"
+    "onLanguage:jsonc"
   ],
   "contributes": {
     "commands": [
