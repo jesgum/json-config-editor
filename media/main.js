@@ -1,9 +1,20 @@
 (function () {
   const vscode = acquireVsCodeApi();
+  const {
+    isPlainObject,
+    isMatrixDef,
+    isPrimitiveArray,
+    getAtPath,
+    setAtPath,
+    pathId,
+    coerce,
+    arrayKind,
+    formatArray,
+    parseArray,
+  } = window.ConfigEditorUtil;
 
   let DATA = null;
   let editTimer = null;
-  let pendingEdit = false;
   const mainEl = document.getElementById("main");
   const toastEl = document.getElementById("toast");
 
@@ -35,7 +46,7 @@
     if (state.expanded && Array.isArray(state.expanded)) {
       state.expanded.forEach((p) => expandedPaths.add(p));
     }
-    renderRoot(false);
+    renderRoot();
     postEdit();
     toast("Undo");
   }
@@ -51,12 +62,13 @@
     if (state.expanded && Array.isArray(state.expanded)) {
       state.expanded.forEach((p) => expandedPaths.add(p));
     }
-    renderRoot(false);
+    renderRoot();
     postEdit();
     toast("Redo");
   }
 
   document.addEventListener("keydown", (e) => {
+    if (e.target && e.target.id === "search") return;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key === "z" && !e.shiftKey) {
       e.preventDefault();
@@ -77,29 +89,29 @@
 
   function postEdit() {
     if (DATA === null) return;
-    pendingEdit = true;
-    vscode.postMessage({ type: "edit", text: JSON.stringify(DATA, null, 2) });
+    vscode.postMessage({ type: "edit", data: DATA });
   }
 
   function notifyEdit() {
     clearTimeout(editTimer);
     editTimer = setTimeout(() => {
+      editTimer = null;
       postEdit();
     }, 500);
   }
 
+  function flushEdit() {
+    if (editTimer === null) return;
+    clearTimeout(editTimer);
+    editTimer = null;
+    postEdit();
+  }
+
+  document.addEventListener("focusout", flushEdit);
+
   /** Call before any mutation to DATA */
   function beforeEdit() {
     pushUndo();
-  }
-
-  function getAtPath(obj, path) {
-    return path.reduce((o, k) => (o == null ? o : o[k]), obj);
-  }
-  function setAtPath(obj, path, val) {
-    let o = obj;
-    for (let i = 0; i < path.length - 1; i++) o = o[path[i]];
-    o[path[path.length - 1]] = val;
   }
 
   function esc(s) {
@@ -108,23 +120,6 @@
     return d.innerHTML;
   }
 
-  function isPlainObject(v) {
-    return v !== null && typeof v === "object" && !Array.isArray(v);
-  }
-  function isMatrixDef(v) {
-    return (
-      isPlainObject(v) &&
-      "labels_rows" in v &&
-      "labels_cols" in v &&
-      "values" in v &&
-      Array.isArray(v.values)
-    );
-  }
-  function isPrimitiveArray(arr) {
-    return arr.every(
-      (x) => typeof x === "string" || typeof x === "number" || x === null
-    );
-  }
   function countChildren(v) {
     if (Array.isArray(v)) return v.length;
     if (isPlainObject(v)) return Object.keys(v).length;
@@ -134,18 +129,6 @@
   /* ════════════════  open/closed state  ════════════════ */
 
   const expandedPaths = new Set();
-
-  function collectOpenPaths() {
-    expandedPaths.clear();
-    const root = document.getElementById("root");
-    if (!root) return;
-    root.querySelectorAll("details[data-path]").forEach((d) => {
-      const path = d.getAttribute("data-path");
-      if (path && d.open) {
-        expandedPaths.add(path);
-      }
-    });
-  }
 
   function rememberOpenState(wrap) {
     const path = wrap.getAttribute("data-path");
@@ -188,7 +171,8 @@
     label.textContent = key;
     const input = document.createElement("input");
     input.type = "text";
-    input.value = String(getAtPath(DATA, path) ?? "");
+    const original = getAtPath(DATA, path);
+    input.value = String(original ?? "");
     input.addEventListener("focus", () => {
       input._before = input.value;
     });
@@ -197,15 +181,11 @@
         beforeEdit();
         input._snapshotted = input._before;
       }
-      setAtPath(DATA, path, input.value);
+      setAtPath(DATA, path, coerce(input.value, original));
       notifyEdit();
     });
     row.append(label, input);
     container.appendChild(row);
-  }
-
-  function pathId(path) {
-    return path.join(".");
   }
 
   function renderPrimitiveArray(container, key, path, arr, depth) {
@@ -227,26 +207,30 @@
     const body = document.createElement("div");
     body.className = "arrwrap";
     let built = false;
+    const kind = arrayKind(arr);
 
     function buildArrayBody() {
       if (built) return;
       built = true;
       const ta = document.createElement("textarea");
       ta.className = "arr";
-      ta.value = getAtPath(DATA, path).join(", ");
+      ta.value = formatArray(getAtPath(DATA, path), kind);
       ta.addEventListener("change", () => {
+        const parsed = parseArray(ta.value, kind);
+        if (!parsed.ok) {
+          toast("Not saved: " + parsed.error);
+          return;
+        }
         beforeEdit();
-        const a = ta.value
-          .split(",")
-          .map((s) => s.trim())
-          .filter((s) => s.length);
+        const a = parsed.value;
         setAtPath(DATA, path, a);
         summary.querySelector(".badge").textContent = a.length + " items";
         notifyEdit();
       });
       const hint = document.createElement("div");
       hint.className = "arrhint";
-      hint.textContent = "comma-separated — edit and click away to save";
+      hint.textContent =
+        'comma-separated — wrap items containing commas in "quotes" — click away to save';
       body.append(ta, hint);
       wrap.appendChild(body);
     }
@@ -295,6 +279,12 @@
       "<th></th>" + cols.map((c) => "<th>" + esc(c) + "</th>").join("");
     table.appendChild(thead);
 
+    function setCell(i, j, v) {
+      const values = getAtPath(DATA, path).values;
+      if (!Array.isArray(values[i])) values[i] = [];
+      values[i][j] = v;
+    }
+
     rows.forEach((r, i) => {
       const tr = document.createElement("tr");
       const td0 = document.createElement("td");
@@ -304,21 +294,21 @@
 
       cols.forEach((_c, j) => {
         const td = document.createElement("td");
-        const val = def.values[i][j];
+        const val = (def.values[i] || [])[j];
         if (val === "0" || val === "1") {
           const cb = document.createElement("input");
           cb.type = "checkbox";
           cb.checked = val === "1";
           cb.addEventListener("change", () => {
             beforeEdit();
-            getAtPath(DATA, path).values[i][j] = cb.checked ? "1" : "0";
+            setCell(i, j, cb.checked ? "1" : "0");
             notifyEdit();
           });
           td.appendChild(cb);
         } else {
           const inp = document.createElement("input");
           inp.type = "text";
-          inp.value = val;
+          inp.value = String(val ?? "");
           inp.addEventListener("focus", () => {
             inp._before = inp.value;
           });
@@ -327,7 +317,7 @@
               beforeEdit();
               inp._snapshotted = inp._before;
             }
-            getAtPath(DATA, path).values[i][j] = inp.value;
+            setCell(i, j, coerce(inp.value, val));
             notifyEdit();
           });
           td.appendChild(inp);
@@ -442,21 +432,10 @@
     }
   }
 
-  function renderRoot(preserveState) {
-    let openPaths = null;
-    if (preserveState) {
-      openPaths = collectOpenPaths();
-    }
-
-    const fragment = document.createDocumentFragment();
+  function renderRoot() {
     if (DATA === null) {
-      fragment.appendChild(document.createElement("div")).className = "loadbox";
-      const empty = document.createElement("div");
-      empty.className = "loadbox";
-      empty.innerHTML = '<p style="color:var(--vscode-descriptionForeground)">Waiting for data…</p>';
-      fragment.innerHTML = empty.outerHTML;
-      mainEl.innerHTML = "";
-      mainEl.appendChild(fragment);
+      mainEl.innerHTML =
+        '<div class="loadbox"><p style="color:var(--vscode-descriptionForeground)">Waiting for data…</p></div>';
       return;
     }
     if (typeof DATA !== "object" || Array.isArray(DATA)) {
@@ -477,12 +456,15 @@
     restoreOpenState(root);
     mainEl.innerHTML = "";
     mainEl.appendChild(root);
+    applyFilter();
   }
 
   /* ════════════════  toolbar  ════════════════ */
 
-  document.getElementById("search").addEventListener("input", (e) => {
-    const q = e.target.value.toLowerCase();
+  const searchEl = document.getElementById("search");
+
+  function applyFilter() {
+    const q = searchEl.value.toLowerCase();
     const root = document.getElementById("root");
     if (!root) return;
     Array.from(root.children).forEach((node) => {
@@ -490,22 +472,21 @@
       const text = (el ? el.textContent : "").toLowerCase();
       node.style.display = text.includes(q) ? "" : "none";
     });
-  });
+  }
+
+  searchEl.addEventListener("input", applyFilter);
 
   document.getElementById("expandAll").addEventListener("click", () => {
     const root = document.getElementById("root");
     if (!root) return;
-    function openAll(el) {
-      el.querySelectorAll("details").forEach((d) => {
-        if (!d.open) {
-          d.open = true;
-          if (d._forceBuild) d._forceBuild();
-        }
+    // building a node adds new closed <details>, so repeat until none are left
+    let closed;
+    while ((closed = root.querySelectorAll("details:not([open])")).length) {
+      closed.forEach((d) => {
+        d.open = true;
+        if (d._forceBuild) d._forceBuild();
       });
     }
-    openAll(root);
-    setTimeout(() => openAll(root), 30);
-    setTimeout(() => openAll(root), 100);
   });
 
   document.getElementById("collapseAll").addEventListener("click", () => {
@@ -520,37 +501,31 @@
     const msg = event.data;
     if (msg.type !== "update") return;
 
-    if (pendingEdit) {
-      pendingEdit = false;
-      return;
-    }
-
-    const text = msg.text;
-    if (!text || !text.trim()) {
+    if (msg.empty) {
       DATA = null;
       mainEl.innerHTML =
         '<div class="loadbox"><h2>Empty file</h2>' +
         "<p>Add JSON content to this file, then reopen the editor.</p></div>";
       return;
     }
-    try {
-      const nextData = JSON.parse(text);
-      const currentText = DATA === null ? null : JSON.stringify(DATA);
-      const nextText = JSON.stringify(nextData);
-      if (currentText !== null && currentText === nextText) {
-        return;
-      }
-
-      DATA = nextData;
-      renderRoot(true);
-    } catch (e) {
+    if (msg.error) {
       DATA = null;
       mainEl.innerHTML =
         '<div class="loadbox"><h2>⚠ Invalid JSON</h2>' +
         '<p style="color:var(--vscode-errorForeground)">' +
-        esc(e.message) +
+        esc(msg.error) +
         "</p></div>";
+      return;
     }
+    if (DATA !== null && JSON.stringify(DATA) === JSON.stringify(msg.data)) {
+      return;
+    }
+
+    // the file changed outside this editor; old history would undo those changes too
+    undoStack.length = 0;
+    redoStack.length = 0;
+    DATA = msg.data;
+    renderRoot();
   });
 
   vscode.postMessage({ type: "ready" });

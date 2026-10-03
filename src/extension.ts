@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import { randomBytes } from "crypto";
+import { applyDataChange, detectFormatting, minimalReplacement, parseDocument } from "./jsonEdit";
 
 let isRedirecting = false;
 
@@ -21,7 +23,7 @@ export function activate(ctx: vscode.ExtensionContext) {
         return;
       }
       if (!isJsonFile(target)) {
-        vscode.window.showWarningMessage("JSON Config Editor only works with .json files.");
+        vscode.window.showWarningMessage("JSON Config Editor only works with .json and .jsonc files.");
         return;
       }
       await openCustomEditor(target, vscode.window.activeTextEditor?.viewColumn);
@@ -30,7 +32,7 @@ export function activate(ctx: vscode.ExtensionContext) {
 }
 
 function isJsonFile(uri: vscode.Uri): boolean {
-  return uri.path.toLowerCase().endsWith(".json");
+  return /\.jsonc?$/i.test(uri.path);
 }
 
 async function openCustomEditor(uri: vscode.Uri, viewColumn?: vscode.ViewColumn) {
@@ -65,31 +67,13 @@ async function closeEditorsForUri(uri: vscode.Uri) {
   }
 
   if (tabsToClose.length > 0) {
-    if (typeof (vscode.window.tabGroups as any).close === "function") {
-      await (vscode.window.tabGroups as any).close(tabsToClose, true);
-      return;
-    }
+    await vscode.window.tabGroups.close(tabsToClose, true);
   }
-
-  const editors = vscode.window.visibleTextEditors.filter((editor) => editor.document.uri.toString() === normalized);
-  if (editors.length === 0) {
-    return;
-  }
-
-  const active = vscode.window.activeTextEditor;
-  if (active && active.document.uri.toString() === normalized) {
-    await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
-    return;
-  }
-
-  const sameUriEditor = editors[0];
-  await vscode.window.showTextDocument(sameUriEditor.document, sameUriEditor.viewColumn, true);
-  await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
 }
 
 function getUriFromTab(tab: vscode.Tab): vscode.Uri | undefined {
-  const input = tab.input as any;
-  if (input?.uri instanceof vscode.Uri) {
+  const input = tab.input;
+  if (input instanceof vscode.TabInputText || input instanceof vscode.TabInputCustom) {
     return input.uri;
   }
   return undefined;
@@ -112,12 +96,13 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
     };
     panel.webview.html = this.html(panel.webview);
 
-    let skipNext = 0;
+    // text of the last edit the webview sent, so its echo isn't sent back
+    let lastWebviewText: string | undefined;
 
     const sendDoc = () =>
       panel.webview.postMessage({
         type: "update",
-        text: document.getText(),
+        ...parseDocument(document.getText()),
       });
 
     const onMsg = panel.webview.onDidReceiveMessage(async (msg) => {
@@ -126,23 +111,30 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
         return;
       }
       if (msg.type === "edit") {
-        skipNext++;
-        const full = new vscode.Range(
-          document.positionAt(0),
-          document.positionAt(document.getText().length)
-        );
+        const text = document.getText();
+        const current = parseDocument(text);
+        if (!("data" in current)) { return; }
+        const newText = applyDataChange(text, current.data, msg.data, detectFormatting(text));
+        if (newText === text) { return; }
+        lastWebviewText = newText;
+        // replace only the changed span so VS Code undo and cursors behave
+        const r = minimalReplacement(text, newText);
         const we = new vscode.WorkspaceEdit();
-        we.replace(document.uri, full, msg.text);
+        we.replace(
+          document.uri,
+          new vscode.Range(document.positionAt(r.start), document.positionAt(r.end)),
+          r.text
+        );
         await vscode.workspace.applyEdit(we);
       }
     });
 
     const onDoc = vscode.workspace.onDidChangeTextDocument((e) => {
       if (e.document.uri.toString() !== document.uri.toString()) { return; }
-      if (skipNext > 0) {
-        skipNext--;
-        return;
-      }
+      if (e.contentChanges.length === 0) { return; }
+      const isEcho = e.document.getText() === lastWebviewText;
+      lastWebviewText = undefined;
+      if (isEcho) { return; }
       sendDoc();
     });
 
@@ -158,14 +150,13 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
     const css = webview.asWebviewUri(
       vscode.Uri.joinPath(this.ctx.extensionUri, "media", "style.css")
     );
+    const util = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.ctx.extensionUri, "media", "util.js")
+    );
     const js = webview.asWebviewUri(
       vscode.Uri.joinPath(this.ctx.extensionUri, "media", "main.js")
     );
-    const nonce = Array.from({ length: 32 }, () =>
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[
-        (Math.random() * 62) | 0
-      ]
-    ).join("");
+    const nonce = randomBytes(16).toString("hex");
 
     return /*html*/ `<!DOCTYPE html>
 <html lang="en">
@@ -191,6 +182,7 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
   </header>
   <main id="main"></main>
   <div class="toast" id="toast"></div>
+  <script nonce="${nonce}" src="${util}"></script>
   <script nonce="${nonce}" src="${js}"></script>
 </body>
 </html>`;

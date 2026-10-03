@@ -1,6 +1,3 @@
-Yes, replace the `:root` variables and swap color references throughout. Here's your full updated `style.css`:
-
-```css
 /* ── Depth colors (theme-neutral gradient) ── */
 :root {
   --mono: 'IBM Plex Mono','SFMono-Regular',Menlo,Consolas,monospace;

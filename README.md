@@ -6,11 +6,19 @@ A VS Code extension for viewing large, nested JSON files in a structured tree vi
 - Open JSON files in a visual tree-based editor
 - Explore nested objects and arrays more easily
 - Keep the workflow focused on configuration files and structured data
+- Supports `.json` and `.jsonc` (comments and trailing commas are allowed)
+- Edits change only the values you touch: comments, indentation, line endings and the rest of the file are left as they were
 
 ## Usage
 1. Open a JSON file in VS Code.
 2. Run the command "Open JSON Config Editor" from the Command Palette or the editor title bar.
 3. Browse the content in the tree view.
+
+### Editing notes
+- Fields keep their type: editing a number stays a number while the text is a valid number, `true`/`false` stay booleans.
+- Lists of simple values are edited as comma-separated text. Wrap an item in double quotes if it contains a comma, a quote or leading/trailing spaces, e.g. `"a, b", c`.
+- Numbers too large for JavaScript (beyond ±2^53) are displayed rounded, but are written back exactly unless you edit them.
+- Undo/redo (Ctrl+Z / Ctrl+Y) inside the editor is reset when the file is changed elsewhere.
 
 ## Installation
 ### From VSIX
@@ -35,6 +43,11 @@ npm run compile
 - Build with:
   ```bash
   npm run compile
+  ```
+- Run the unit tests and the linter:
+  ```bash
+  npm test
+  npm run lint
   ```
 
 ## License

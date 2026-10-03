@@ -25,10 +25,6 @@
   "preview": false,
   "icon": "media/icon.png",
   "main": "./out/extension.js",
-  "activationEvents": [
-    "onLanguage:json",
-    "onLanguage:jsonc"
-  ],
   "contributes": {
     "commands": [
       {
@@ -53,6 +49,9 @@
         "selector": [
           {
             "filenamePattern": "*.json"
+          },
+          {
+            "filenamePattern": "*.jsonc"
           }
         ],
         "priority": "option"
@@ -63,11 +62,20 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "dev": "npm run compile && vsce package && code --install-extension json-config-editor-*.vsix --force"
+    "dev": "npm run compile && vsce package && code --install-extension json-config-editor-*.vsix --force",
+    "lint": "eslint .",
+    "test": "npm run compile && node --test test/"
   },
   "devDependencies": {
-    "@types/vscode": "^1.80.0",
+    "@eslint/js": "^9.39.5",
     "@types/node": "^18.0.0",
-    "typescript": "^5.1.0"
+    "@types/vscode": "^1.80.0",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
+    "typescript": "^5.1.0",
+    "typescript-eslint": "^8.71.0"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
   }
 }
