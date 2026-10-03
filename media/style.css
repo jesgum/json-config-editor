@@ -150,20 +150,12 @@ details[open]>summary .arrow{transform:rotate(90deg)}
 .row input[type=text]{flex:1}
 
 /* ── primitive arrays ── */
-textarea.arr{
-  width:100%;min-height:60px;
-  background:var(--vscode-input-background);
-  border:1px solid var(--vscode-input-border);
-  color:var(--vscode-input-foreground);
-  font-family:var(--vscode-font-family, var(--mono));font-size:12px;border-radius:4px;padding:8px;
-  resize:vertical;
-}
-textarea.arr:focus{
-  border-color:var(--vscode-focusBorder);
-  outline:none;
-}
-.arrwrap{padding:6px 8px 10px 26px}
-.arrhint{color:var(--vscode-descriptionForeground);font-size:11px;margin-top:4px}
+.arrwrap{padding:4px 8px 8px 26px;display:flex;flex-direction:column;gap:4px}
+.arritem{display:flex;align-items:center;gap:4px}
+.arritem input[type=text]{flex:1}
+button.icon{width:30px;padding:5px 0;text-align:center;font-size:14px;line-height:1}
+button.icon.placeholder{visibility:hidden}
+.arrempty{flex:1;color:var(--vscode-descriptionForeground);font-style:italic;padding-left:2px}
 
 /* ── matrix tables ── */
 table.matrix{border-collapse:collapse;margin:6px 0 10px 26px}

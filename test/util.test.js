@@ -33,45 +33,10 @@ test("isMatrixDef requires array labels and values", () => {
   assert.ok(!util.isMatrixDef([1]));
 });
 
-test("arrayKind", () => {
-  assert.equal(util.arrayKind(["a", "1"]), "string");
-  assert.equal(util.arrayKind([1, 2]), "number");
-  assert.equal(util.arrayKind([1, "a"]), "mixed");
-  assert.equal(util.arrayKind([]), "mixed");
-});
-
-function roundTrip(arr) {
-  const kind = util.arrayKind(arr);
-  const parsed = util.parseArray(util.formatArray(arr, kind), kind);
-  assert.ok(parsed.ok, parsed.error);
-  assert.deepEqual(parsed.value, arr);
-}
-
-test("primitive arrays round-trip through text", () => {
-  roundTrip(["a", "b c", "8080", "null", "true"]);
-  roundTrip(["has, comma", 'has "quote"', " padded ", "", "multi\nline"]);
-  roundTrip([1, 2.5, -3e2, 0]);
-  roundTrip([1, "1", null, true, false, "null", "x, y"]);
-  roundTrip([]);
-});
-
-test("string arrays keep numeric-looking items unquoted", () => {
-  assert.equal(util.formatArray(["8080", "443"], "string"), "8080, 443");
-});
-
-test("parseArray reads unquoted items by array kind", () => {
-  assert.deepEqual(util.parseArray("1, 2, x", "number").value, [1, 2, "x"]);
-  assert.deepEqual(util.parseArray("1, null, true, x", "mixed").value, [1, null, true, "x"]);
-  assert.deepEqual(util.parseArray("1, null", "string").value, ["1", "null"]);
-});
-
-test("parseArray tolerates empty items and whitespace", () => {
-  assert.deepEqual(util.parseArray("a,, b ,", "string").value, ["a", "b"]);
-  assert.deepEqual(util.parseArray("   ", "string").value, []);
-  assert.deepEqual(util.parseArray('"a, b" , c', "string").value, ["a, b", "c"]);
-});
-
-test("parseArray reports malformed quoting", () => {
-  assert.equal(util.parseArray('"abc', "string").ok, false);
-  assert.equal(util.parseArray('"a" b', "string").ok, false);
+test("emptyLike keeps the type of the previous entry", () => {
+  assert.equal(util.emptyLike("Other"), "");
+  assert.equal(util.emptyLike(5), 0);
+  assert.equal(util.emptyLike(true), false);
+  assert.equal(util.emptyLike(null), null);
+  assert.equal(util.emptyLike(undefined), "");
 });

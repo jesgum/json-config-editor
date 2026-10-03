@@ -8,9 +8,7 @@
     setAtPath,
     pathId,
     coerce,
-    arrayKind,
-    formatArray,
-    parseArray,
+    emptyLike,
   } = window.ConfigEditorUtil;
 
   let DATA = null;
@@ -193,45 +191,108 @@
     const id = pathId(path);
     wrap.setAttribute("data-path", id);
     wrap.classList.add("depth-" + (depth % 5));
+    wrap.classList.add("leaf-array");
     const summary = document.createElement("summary");
     summary.innerHTML =
       '<span class="arrow">▸</span><span class="key leaf-key">' +
       esc(key) +
-      '</span><span class="badge">' +
-      arr.length +
-      " items</span>";
+      '</span><span class="badge"></span>';
     wrap.appendChild(summary);
-    wrap.classList.add("depth-" + (depth % 5));
-    wrap.classList.add("leaf-array");
+    const badge = summary.querySelector(".badge");
+    const setBadge = (n) => (badge.textContent = n + (n === 1 ? " item" : " items"));
+    setBadge(arr.length);
 
     const body = document.createElement("div");
     body.className = "arrwrap";
     let built = false;
-    const kind = arrayKind(arr);
+
+    function iconButton(label, title, onClick) {
+      const b = document.createElement("button");
+      b.className = "ghost icon";
+      b.textContent = label;
+      b.title = title;
+      b.addEventListener("click", onClick);
+      return b;
+    }
+
+    /** Structural change: snapshot, mutate, re-render the list, save right away */
+    function change(mutate, focusIndex) {
+      beforeEdit();
+      const items = getAtPath(DATA, path);
+      mutate(items);
+      setBadge(items.length);
+      renderItems();
+      notifyEdit();
+      flushEdit();
+      if (focusIndex !== undefined) {
+        const inputs = body.querySelectorAll("input");
+        const target = inputs[Math.min(focusIndex, inputs.length - 1)];
+        if (target) {
+          target.focus();
+          target.select();
+        }
+      }
+    }
+
+    function addItem() {
+      const items = getAtPath(DATA, path);
+      const last = items[items.length - 1];
+      change((a) => a.push(emptyLike(last)), items.length);
+    }
+
+    function renderItems() {
+      body.innerHTML = "";
+      const items = getAtPath(DATA, path);
+
+      if (items.length === 0) {
+        const row = document.createElement("div");
+        row.className = "arritem";
+        const empty = document.createElement("span");
+        empty.className = "arrempty";
+        empty.textContent = "empty list";
+        row.append(empty, iconButton("+", "Add entry", addItem));
+        body.appendChild(row);
+        return;
+      }
+
+      items.forEach((original, i) => {
+        const row = document.createElement("div");
+        row.className = "arritem";
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = String(original ?? "");
+        input.addEventListener("focus", () => {
+          input._before = input.value;
+        });
+        input.addEventListener("input", () => {
+          if (input._snapshotted !== input._before) {
+            beforeEdit();
+            input._snapshotted = input._before;
+          }
+          getAtPath(DATA, path)[i] = coerce(input.value, original);
+          notifyEdit();
+        });
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && i === items.length - 1) {
+            e.preventDefault();
+            addItem();
+          }
+        });
+
+        const remove = iconButton("−", "Remove entry", () =>
+          change((a) => a.splice(i, 1), i)
+        );
+        const add = iconButton("+", "Add entry", addItem);
+        if (i !== items.length - 1) add.classList.add("placeholder");
+        row.append(input, remove, add);
+        body.appendChild(row);
+      });
+    }
 
     function buildArrayBody() {
       if (built) return;
       built = true;
-      const ta = document.createElement("textarea");
-      ta.className = "arr";
-      ta.value = formatArray(getAtPath(DATA, path), kind);
-      ta.addEventListener("change", () => {
-        const parsed = parseArray(ta.value, kind);
-        if (!parsed.ok) {
-          toast("Not saved: " + parsed.error);
-          return;
-        }
-        beforeEdit();
-        const a = parsed.value;
-        setAtPath(DATA, path, a);
-        summary.querySelector(".badge").textContent = a.length + " items";
-        notifyEdit();
-      });
-      const hint = document.createElement("div");
-      hint.className = "arrhint";
-      hint.textContent =
-        'comma-separated — wrap items containing commas in "quotes" — click away to save';
-      body.append(ta, hint);
+      renderItems();
       wrap.appendChild(body);
     }
 

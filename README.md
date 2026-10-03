@@ -16,7 +16,7 @@ A VS Code extension for viewing large, nested JSON files in a structured tree vi
 
 ### Editing notes
 - Fields keep their type: editing a number stays a number while the text is a valid number, `true`/`false` stay booleans.
-- Lists of simple values are edited as comma-separated text. Wrap an item in double quotes if it contains a comma, a quote or leading/trailing spaces, e.g. `"a, b", c`.
+- Lists of simple values show one field per entry: **−** removes an entry, **+** (or Enter in the last field) adds one. New entries take the type of the last entry; an emptied list stays `[]` and can be added to again.
 - Numbers too large for JavaScript (beyond ±2^53) are displayed rounded, but are written back exactly unless you edit them.
 - Undo/redo (Ctrl+Z / Ctrl+Y) inside the editor is reset when the file is changed elsewhere.
 
