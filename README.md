@@ -14,6 +14,11 @@ A VS Code extension for viewing large, nested JSON files in a structured tree vi
 2. Run the command "Open JSON Config Editor" from the Command Palette or the editor title bar.
 3. Browse the content in the tree view.
 
+### Searching
+- Ctrl+F (Cmd+F on macOS) focuses the search box. It matches keys and values at any depth, opens the parents of each match, and hides fields that don't match.
+- Enter / Shift+Enter jumps to the next / previous match. Esc clears the search and puts back the folds you had before.
+- A query containing `.` is matched against the full path, e.g. `http.timeout` finds `server.http.timeout`.
+
 ### Editing notes
 - Fields keep their type: editing a number stays a number while the text is a valid number, `true`/`false` stay booleans.
 - Lists of simple values show one field per entry: **−** removes an entry, **+** (or Enter in the last field) adds one. New entries take the type of the last entry; an emptied list stays `[]` and can be added to again.

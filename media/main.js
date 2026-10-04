@@ -9,6 +9,7 @@
     pathId,
     coerce,
     emptyLike,
+    searchData,
   } = window.ConfigEditorUtil;
 
   let DATA = null;
@@ -164,6 +165,7 @@
   function renderLeafRow(container, key, path, depth) {
     const row = document.createElement("div");
     row.className = "row";
+    row.setAttribute("data-path", pathId(path));
     const label = document.createElement("div");
     label.className = "key depth-" + (depth % 5);
     label.textContent = key;
@@ -258,6 +260,7 @@
       items.forEach((original, i) => {
         const row = document.createElement("div");
         row.className = "arritem";
+        row.setAttribute("data-path", pathId(path.concat(i)));
         const input = document.createElement("input");
         input.type = "text";
         input.value = String(original ?? "");
@@ -336,8 +339,13 @@
     table.className = "matrix";
 
     const thead = document.createElement("tr");
-    thead.innerHTML =
-      "<th></th>" + cols.map((c) => "<th>" + esc(c) + "</th>").join("");
+    thead.appendChild(document.createElement("th"));
+    cols.forEach((c, j) => {
+      const th = document.createElement("th");
+      th.setAttribute("data-path", pathId(path.concat("labels_cols", j)));
+      th.textContent = c;
+      thead.appendChild(th);
+    });
     table.appendChild(thead);
 
     function setCell(i, j, v) {
@@ -350,11 +358,13 @@
       const tr = document.createElement("tr");
       const td0 = document.createElement("td");
       td0.className = "rowlabel";
+      td0.setAttribute("data-path", pathId(path.concat("labels_rows", i)));
       td0.textContent = r;
       tr.appendChild(td0);
 
       cols.forEach((_c, j) => {
         const td = document.createElement("td");
+        td.setAttribute("data-path", pathId(path.concat("values", i, j)));
         const val = (def.values[i] || [])[j];
         if (val === "0" || val === "1") {
           const cb = document.createElement("input");
@@ -523,19 +533,127 @@
   /* ════════════════  toolbar  ════════════════ */
 
   const searchEl = document.getElementById("search");
+  const searchCountEl = document.getElementById("searchCount");
+  let searchTimer = null;
+  let hitEls = [];
+  let hitIndex = -1;
+  // open/closed state from before the search started, put back when it is cleared
+  let preSearchOpen = null;
 
-  function applyFilter() {
-    const q = searchEl.value.toLowerCase();
-    const root = document.getElementById("root");
-    if (!root) return;
-    Array.from(root.children).forEach((node) => {
-      const el = node.querySelector("summary .key, .key");
-      const text = (el ? el.textContent : "").toLowerCase();
-      node.style.display = text.includes(q) ? "" : "none";
+  function snapshotOpenState(root) {
+    const open = new Map();
+    root.querySelectorAll("details[data-path]").forEach((d) =>
+      open.set(d.getAttribute("data-path"), d.open)
+    );
+    return { open, expanded: new Set(expandedPaths) };
+  }
+
+  function restorePreSearchState(root) {
+    const { open, expanded } = preSearchOpen;
+    preSearchOpen = null;
+    root.querySelectorAll("details[data-path]").forEach((d) => {
+      const id = d.getAttribute("data-path");
+      d.open = open.has(id) ? open.get(id) : expanded.has(id);
     });
   }
 
-  searchEl.addEventListener("input", applyFilter);
+  function updateSearchCount() {
+    if (!searchEl.value.trim()) searchCountEl.textContent = "";
+    else if (!hitEls.length) searchCountEl.textContent = "No results";
+    else if (hitIndex < 0) searchCountEl.textContent = hitEls.length + (hitEls.length === 1 ? " match" : " matches");
+    else searchCountEl.textContent = hitIndex + 1 + " of " + hitEls.length;
+  }
+
+  function goToHit(index) {
+    // editing a list re-renders its entries, dropping their hit elements
+    hitEls = hitEls.filter((el) => el.isConnected);
+    if (!hitEls.length) return updateSearchCount();
+    if (hitIndex >= 0 && hitEls[hitIndex]) hitEls[hitIndex].classList.remove("hit-current");
+    hitIndex = (index + hitEls.length) % hitEls.length;
+    const el = hitEls[hitIndex];
+    el.classList.add("hit-current");
+    el.scrollIntoView({ block: "center" });
+    updateSearchCount();
+  }
+
+  /** Filter the tree to the search hits; jump=true scrolls to the first one */
+  function applyFilter(jump) {
+    const root = document.getElementById("root");
+    if (!root) return;
+    const query = searchEl.value;
+    const active = query.trim() !== "";
+
+    if (active && !preSearchOpen) preSearchOpen = snapshotOpenState(root);
+    if (!active && preSearchOpen) restorePreSearchState(root);
+
+    const { hits, parents, visible } = searchData(DATA, query);
+
+    // open every node with a hit below it; opening builds children, so repeat
+    let opened;
+    do {
+      opened = 0;
+      root.querySelectorAll("details[data-path]:not([open])").forEach((d) => {
+        if (!parents.has(d.getAttribute("data-path"))) return;
+        d.open = true;
+        if (d._forceBuild) d._forceBuild();
+        opened++;
+      });
+    } while (opened);
+
+    root.querySelectorAll("[data-path]").forEach((el) => {
+      const id = el.getAttribute("data-path");
+      const kind = hits.get(id);
+      el.classList.toggle("hit", !!kind);
+      el.classList.toggle("hit-key", kind === "key");
+      el.classList.toggle("hit-value", kind === "value");
+      el.classList.remove("hit-current");
+      // list entries and matrix cells stay visible; only whole fields are filtered
+      if (el.matches(".row, details")) {
+        el.style.display = !active || visible.has(id) ? "" : "none";
+      }
+    });
+
+    hitEls = Array.from(root.querySelectorAll(".hit"));
+    hitIndex = -1;
+    if (jump && hitEls.length) goToHit(0);
+    else updateSearchCount();
+  }
+
+  function runSearch() {
+    clearTimeout(searchTimer);
+    searchTimer = null;
+    applyFilter(true);
+  }
+
+  searchEl.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 150);
+  });
+
+  searchEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (searchTimer !== null) runSearch();
+      else if (hitIndex < 0) goToHit(e.shiftKey ? -1 : 0);
+      else goToHit(hitIndex + (e.shiftKey ? -1 : 1));
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      if (searchEl.value) {
+        searchEl.value = "";
+        runSearch();
+      } else {
+        searchEl.blur();
+      }
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      searchEl.focus();
+      searchEl.select();
+    }
+  });
 
   document.getElementById("expandAll").addEventListener("click", () => {
     const root = document.getElementById("root");

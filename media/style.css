@@ -203,3 +203,24 @@ table.matrix input[type=text]{width:60px;text-align:center}
 ::-webkit-scrollbar-thumb:hover{
   background:var(--vscode-scrollbarSlider-hoverBackground);
 }
+/* ── search hits ── */
+.search-count{font-size:11px;color:var(--vscode-descriptionForeground);min-width:60px;margin-left:-6px}
+.hit-key > .key,
+.hit-key > summary .key,
+th.hit,td.hit:not(:has(input)){
+  background:var(--vscode-editor-findMatchHighlightBackground, rgba(234,92,0,.33));
+  border-radius:3px;
+}
+.hit-value > input[type=text],
+td.hit > input[type=text]{
+  border-color:var(--vscode-editor-findMatchHighlightBorder, var(--vscode-focusBorder));
+  background:var(--vscode-editor-findMatchHighlightBackground, rgba(234,92,0,.33));
+}
+td.hit > input[type=checkbox]{outline:2px solid var(--vscode-focusBorder);outline-offset:1px}
+.hit-current > .key,
+.hit-current > summary .key,
+.hit-current > input[type=text],
+th.hit-current,td.hit-current:not(:has(input)){
+  background:var(--vscode-editor-findMatchBackground, rgba(81,92,106,.6));
+  outline:1px solid var(--vscode-editor-findMatchBorder, var(--vscode-focusBorder));
+}

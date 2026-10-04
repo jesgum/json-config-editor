@@ -175,7 +175,9 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
       <div class="t">JSON Config Editor</div>
       <div class="s">tree view for nested JSON</div>
     </div>
-    <input id="search" type="search" placeholder="filter top-level keys…"/>
+    <input id="search" type="search" placeholder="search keys &amp; values (Ctrl+F)"
+      title="Enter / Shift+Enter: next / previous match · Esc: clear · use a.b to match a path"/>
+    <span id="searchCount" class="search-count"></span>
     <button id="expandAll"   class="ghost">expand all</button>
     <button id="collapseAll" class="ghost">collapse all</button>
     <div class="spacer"></div>
