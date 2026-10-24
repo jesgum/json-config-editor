@@ -152,10 +152,11 @@ details[open]>summary .arrow{transform:rotate(90deg)}
 /* ── primitive arrays ── */
 .arrwrap{padding:4px 8px 8px 26px;display:flex;flex-direction:column;gap:4px}
 .arritem{display:flex;align-items:center;gap:4px}
-.arritem input[type=text]{flex:1}
+.arrcell{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
+.arrcell input[type=text]{flex:1;min-width:0}
 button.icon{width:30px;padding:5px 0;text-align:center;font-size:14px;line-height:1}
 button.icon.placeholder{visibility:hidden}
-.arrempty{flex:1;color:var(--vscode-descriptionForeground);font-style:italic;padding-left:2px}
+.arrempty{flex:1;color:var(--vscode-descriptionForeground);font-style:italic;padding:7px 2px;font-size:12px;border:1px solid transparent}
 
 /* ── matrix tables ── */
 table.matrix{border-collapse:collapse;margin:6px 0 10px 26px}
@@ -212,6 +213,7 @@ th.hit,td.hit:not(:has(input)){
   border-radius:3px;
 }
 .hit-value > input[type=text],
+.hit-value > .arrcell > input[type=text],
 td.hit > input[type=text]{
   border-color:var(--vscode-editor-findMatchHighlightBorder, var(--vscode-focusBorder));
   background:var(--vscode-editor-findMatchHighlightBackground, rgba(234,92,0,.33));
@@ -220,6 +222,7 @@ td.hit > input[type=checkbox]{outline:2px solid var(--vscode-focusBorder);outlin
 .hit-current > .key,
 .hit-current > summary .key,
 .hit-current > input[type=text],
+.hit-current > .arrcell > input[type=text],
 th.hit-current,td.hit-current:not(:has(input)){
   background:var(--vscode-editor-findMatchBackground, rgba(81,92,106,.6));
   outline:1px solid var(--vscode-editor-findMatchBorder, var(--vscode-focusBorder));

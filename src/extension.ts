@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { randomBytes } from "crypto";
-import { applyDataChange, detectFormatting, minimalReplacement, parseDocument } from "./jsonEdit";
+import { parseDocument } from "./jsonEdit";
+import { dataEdit } from "./documentEdit";
 
 let isRedirecting = false;
 
@@ -111,21 +112,10 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
         return;
       }
       if (msg.type === "edit") {
-        const text = document.getText();
-        const current = parseDocument(text);
-        if (!("data" in current)) { return; }
-        const newText = applyDataChange(text, current.data, msg.data, detectFormatting(text));
-        if (newText === text) { return; }
-        lastWebviewText = newText;
-        // replace only the changed span so VS Code undo and cursors behave
-        const r = minimalReplacement(text, newText);
-        const we = new vscode.WorkspaceEdit();
-        we.replace(
-          document.uri,
-          new vscode.Range(document.positionAt(r.start), document.positionAt(r.end)),
-          r.text
-        );
-        await vscode.workspace.applyEdit(we);
+        const change = dataEdit(document, msg.data);
+        if (!change) { return; }
+        lastWebviewText = change.text;
+        await vscode.workspace.applyEdit(change.edit);
       }
     });
 
@@ -152,6 +142,9 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
     );
     const util = webview.asWebviewUri(
       vscode.Uri.joinPath(this.ctx.extensionUri, "media", "util.js")
+    );
+    const tree = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.ctx.extensionUri, "media", "tree.js")
     );
     const js = webview.asWebviewUri(
       vscode.Uri.joinPath(this.ctx.extensionUri, "media", "main.js")
@@ -185,6 +178,7 @@ class ConfigEditorProvider implements vscode.CustomTextEditorProvider {
   <main id="main"></main>
   <div class="toast" id="toast"></div>
   <script nonce="${nonce}" src="${util}"></script>
+  <script nonce="${nonce}" src="${tree}"></script>
   <script nonce="${nonce}" src="${js}"></script>
 </body>
 </html>`;

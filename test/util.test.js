@@ -81,3 +81,35 @@ test("searchData ignores array indices and matrix internals as keys", () => {
   assert.deepEqual([...util.searchData(data, "two").hits], [[id(["list", 1]), "value"]]);
   assert.equal(util.searchData(data, "  ").hits.size, 0);
 });
+
+test("diffData matches objects by key and arrays by index", () => {
+  const d = util.diffData(
+    { a: 1, b: { c: "x", d: [1, 2] }, gone: true },
+    { a: 1, b: { c: "y", d: [1, 2, 3] }, extra: { n: 1 } }
+  );
+  assert.equal(d.status, "changed");
+  assert.deepEqual(d.children.map((c) => [c.key, c.node.status]), [
+    ["a", "same"],
+    ["b", "changed"],
+    ["gone", "removed"],
+    ["extra", "added"],
+  ]);
+  const b = d.children[1].node;
+  assert.equal(b.changes, 2);
+  assert.deepEqual(b.children[0].node, { status: "changed", left: "x", right: "y", changes: 1 });
+  const arr = b.children[1].node;
+  assert.ok(arr.array);
+  assert.deepEqual(arr.children.map((c) => [c.key, c.node.status]), [[0, "same"], [1, "same"], [2, "added"]]);
+  // a subtree that exists on one side only can still be browsed
+  assert.deepEqual(d.children[3].node.children, [{ key: "n", node: { status: "added", right: 1, changes: 1 } }]);
+  assert.equal(d.changes, 4);
+});
+
+test("diffData treats type changes as one changed value", () => {
+  assert.equal(util.diffData({ a: "1" }, { a: 1 }).children[0].node.status, "changed");
+  const t = util.diffData({ a: { x: 1 } }, { a: [1] }).children[0].node;
+  assert.equal(t.status, "changed");
+  assert.equal(t.children, undefined);
+  assert.equal(util.diffData({ a: [{ x: 1 }] }, { a: [{ x: 1 }] }).status, "same");
+  assert.equal(util.diffData({}, {}).status, "same");
+});

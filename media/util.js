@@ -120,8 +120,74 @@
     return { hits, parents, visible };
   }
 
+  function deepEqual(a, b) {
+    if (a === b) return true;
+    if (Array.isArray(a) && Array.isArray(b)) {
+      return a.length === b.length && a.every((v, i) => deepEqual(v, b[i]));
+    }
+    if (isPlainObject(a) && isPlainObject(b)) {
+      const ka = Object.keys(a);
+      return ka.length === Object.keys(b).length && ka.every((k) => has(b, k) && deepEqual(a[k], b[k]));
+    }
+    return false;
+  }
+
+  function has(o, k) {
+    return Object.prototype.hasOwnProperty.call(o, k);
+  }
+
+  function isContainer(v) {
+    return Array.isArray(v) || isPlainObject(v);
+  }
+
+  /** A value that exists on one side only; containers keep their children so they can be browsed */
+  function oneSided(value, status) {
+    const node = { status, changes: 1 };
+    node[status === "added" ? "right" : "left"] = value;
+    if (isContainer(value)) {
+      node.array = Array.isArray(value);
+      node.children = Object.keys(value).map((k) => ({
+        key: node.array ? Number(k) : k,
+        node: oneSided(value[k], status),
+      }));
+    }
+    return node;
+  }
+
+  /**
+   * Compare two values. Objects are matched by key (left order first, then keys only on the right),
+   * arrays by index. Returns { status: "same" | "changed" | "added" | "removed", left, right,
+   * changes (number of differing fields below), array, children: [{ key, node }] }.
+   * A container on one side and a different type on the other is a single changed value.
+   */
+  function diffData(left, right) {
+    const bothArrays = Array.isArray(left) && Array.isArray(right);
+    if (!bothArrays && !(isPlainObject(left) && isPlainObject(right))) {
+      const same = deepEqual(left, right);
+      return { status: same ? "same" : "changed", left, right, changes: same ? 0 : 1 };
+    }
+    let keys;
+    if (bothArrays) {
+      keys = Array.from({ length: Math.max(left.length, right.length) }, (_, i) => i);
+    } else {
+      keys = Object.keys(left).concat(Object.keys(right).filter((k) => !has(left, k)));
+    }
+    let changes = 0;
+    const children = keys.map((k) => {
+      let node;
+      if (!has(left, k)) node = oneSided(right[k], "added");
+      else if (!has(right, k)) node = oneSided(left[k], "removed");
+      else node = diffData(left[k], right[k]);
+      changes += node.changes;
+      return { key: k, node };
+    });
+    return { status: changes ? "changed" : "same", left, right, changes, array: bothArrays, children };
+  }
+
   return {
     searchData,
+    diffData,
+    deepEqual,
     isPlainObject,
     isMatrixDef,
     isPrimitiveArray,
