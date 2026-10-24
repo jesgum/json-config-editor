@@ -147,7 +147,31 @@ details[open]>summary .arrow{transform:rotate(90deg)}
 /* ── leaf rows ── */
 .row{display:flex;align-items:center;gap:8px;padding:4px 8px 4px 26px}
 .row .key{min-width:230px;flex-shrink:0;overflow-wrap:anywhere}
-.row input[type=text]{flex:1}
+.row > .vcell{flex:1}
+.vcell{display:flex;align-items:center;gap:4px;min-width:0}
+.vcell > input[type=text]{flex:1;min-width:0}
+
+/* ── field buttons (rename, copy, delete), shown on hover ── */
+.sumhead{display:flex;align-items:center;gap:8px;min-width:0}
+summary > .tools{margin-left:auto}
+.tools{display:flex;gap:2px;flex-shrink:0;opacity:0}
+.tools button.icon,.key button.rename{width:24px;padding:4px 0;font-size:13px}
+.key button.rename{margin-left:4px;opacity:0;border-color:transparent}
+.row:hover .tools,summary:hover > .tools,.tools:focus-within,
+.row:hover .key button.rename,summary:hover .key button.rename,.key button.rename:focus{opacity:1}
+
+/* ── adding a field ── */
+button.addfield{border-style:dashed;color:var(--vscode-descriptionForeground);padding:4px 10px}
+.addrow .key{display:flex}
+.searching .addrow{display:none}
+input.keyinput{width:100%;min-width:0;padding:4px 8px}
+input.invalid{border-color:var(--vscode-inputValidation-errorBorder, #be1100)}
+select{
+  background:var(--vscode-dropdown-background, var(--vscode-input-background));
+  color:var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+  border:1px solid var(--vscode-dropdown-border, var(--vscode-input-border));
+  padding:6px 8px;border-radius:4px;font-family:var(--vscode-font-family, var(--mono));font-size:12px;
+}
 
 /* ── primitive arrays ── */
 .arrwrap{padding:4px 8px 8px 26px;display:flex;flex-direction:column;gap:4px}
@@ -214,6 +238,7 @@ th.hit,td.hit:not(:has(input)){
 }
 .hit-value > input[type=text],
 .hit-value > .arrcell > input[type=text],
+.hit-value > .vcell > input[type=text],
 td.hit > input[type=text]{
   border-color:var(--vscode-editor-findMatchHighlightBorder, var(--vscode-focusBorder));
   background:var(--vscode-editor-findMatchHighlightBackground, rgba(234,92,0,.33));
@@ -223,6 +248,7 @@ td.hit > input[type=checkbox]{outline:2px solid var(--vscode-focusBorder);outlin
 .hit-current > summary .key,
 .hit-current > input[type=text],
 .hit-current > .arrcell > input[type=text],
+.hit-current > .vcell > input[type=text],
 th.hit-current,td.hit-current:not(:has(input)){
   background:var(--vscode-editor-findMatchBackground, rgba(81,92,106,.6));
   outline:1px solid var(--vscode-editor-findMatchBorder, var(--vscode-focusBorder));
@@ -253,6 +279,9 @@ main.compare{max-width:none}
  */
 .columns .row{display:grid;grid-template-columns:calc(240px - var(--depth, 0) * 20px) 1fr 1fr}
 .columns .row .key{min-width:0}
+/* section headers: 4px further in (border and margin) and 18px less padding than rows */
+.columns details > summary{display:grid;grid-template-columns:calc(254px - var(--depth, 0) * 20px) 1fr 1fr}
+.columns summary > .tools{margin-left:0;justify-content:flex-end}
 .columns .arritem,
 .columns .mtables{display:grid;grid-template-columns:calc(236px - var(--depth, 0) * 20px) 1fr 1fr;gap:8px}
 .columns .arritem::before,
@@ -272,11 +301,13 @@ input[type=text]:disabled:not(.ghost){opacity:.75}
 .row.status-changed,.row.status-added,.row.status-removed,
 .arritem.status-changed,.arritem.status-added,.arritem.status-removed{box-shadow:inset 3px 0 0 var(--status);border-radius:4px}
 :is(.status-changed,.status-removed) > input[data-side="0"],
-:is(.status-changed,.status-removed) > .arrcell > input[data-side="0"]{
+:is(.status-changed,.status-removed) > .arrcell > input[data-side="0"],
+:is(.status-changed,.status-removed) > .vcell > input[data-side="0"]{
   background:var(--vscode-diffEditor-removedTextBackground, rgba(255,0,0,.2));
 }
 :is(.status-changed,.status-added) > input[data-side="1"],
-:is(.status-changed,.status-added) > .arrcell > input[data-side="1"]{
+:is(.status-changed,.status-added) > .arrcell > input[data-side="1"],
+:is(.status-changed,.status-added) > .vcell > input[data-side="1"]{
   background:var(--vscode-diffEditor-insertedTextBackground, rgba(155,185,85,.2));
 }
 td:is(.status-changed,.status-added,.status-removed) > input[type=checkbox]{outline:2px solid var(--status);outline-offset:1px}

@@ -6,7 +6,8 @@ A VS Code extension for viewing large, nested JSON files in a structured tree vi
 - Open JSON files in a visual tree-based editor
 - Explore nested objects and arrays more easily
 - Keep the workflow focused on configuration files and structured data
-- Compare two JSON files side by side as a tree
+- Add, rename and delete fields
+- Compare two JSON files side by side as a tree, edit both and copy values across
 - Supports `.json` and `.jsonc` (comments and trailing commas are allowed)
 - Edits change only the values you touch: comments, indentation, line endings and the rest of the file are left as they were
 
@@ -25,8 +26,14 @@ A VS Code extension for viewing large, nested JSON files in a structured tree vi
 - Or select two JSON files in the Explorer and choose **Compare Selected (JSON Config)**.
 - The compare view is one tree with the key, then a value column per file. A field only one file has leaves a blank placeholder in the other column.
 - Changed values are highlighted on both sides, and added or removed fields are marked. Objects are matched by key, lists by position.
-- Both files can be edited right in the compare view, the same way as in the editor: fields, list entries (**−** / **+**), matrix cells, Ctrl+Z / Ctrl+Y. Each edit is saved to the file straight away, unless that file has unsaved changes in another tab; then it is left unsaved there.
+- Both files can be edited right in the compare view, the same way as in the editor: fields, list entries (**−** / **+**), matrix cells, adding, renaming and deleting fields, Ctrl+Z / Ctrl+Y. Each edit is saved to the file straight away, unless that file has unsaved changes in another tab; then it is left unsaved there.
+- Hover a field to copy it to the other file: **→** copies a left value to the right file, **←** the other way. This works for single values and whole sections, and replaces what the other file has there. **×** deletes a field from that file only, and **+ add field** in a file's column adds to that file. Renaming (**✎**) renames the field in both files.
 - Search (Ctrl+F) looks through both files. **differences only** hides fields that are the same; **swap** switches left and right; click a file name to open it in the editor. The view updates as either file changes.
+
+### Adding, renaming and deleting fields
+- Every object ends with **+ add field**: type a name, pick a type (text, number, true/false, object or list) and press Enter. Esc cancels.
+- Hover a field to show **✎** (rename; Enter to confirm, Esc to cancel) and **×** (delete). A deleted field can be brought back with Ctrl+Z.
+- A renamed field keeps its place in the file, along with the comments and formatting inside it. New fields are added at the end of their object.
 
 ### Editing notes
 - Fields keep their type: editing a number stays a number while the text is a valid number, `true`/`false` stay booleans.

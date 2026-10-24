@@ -16,21 +16,35 @@
     emptyLike,
     searchData,
     diffData,
+    deepEqual,
   } = window.ConfigEditorUtil;
 
   const MISSING = { missing: true };
   const STATUSES = ["changed", "added", "removed"];
   const MAX_HISTORY = 50;
 
-  function esc(s) {
-    const d = document.createElement("div");
-    d.textContent = String(s);
-    return d.innerHTML;
-  }
-
   function isContainer(v) {
     return Array.isArray(v) || isPlainObject(v);
   }
+
+  function has(obj, key) {
+    return Object.prototype.hasOwnProperty.call(obj, key);
+  }
+
+  /** Replace obj's keys with `entries`, in place so references to obj stay valid */
+  function setEntries(obj, entries) {
+    Object.keys(obj).forEach((k) => delete obj[k]);
+    entries.forEach(([k, v]) => (obj[k] = v));
+  }
+
+  /** Starting values for the types a new field can have */
+  const NEW_VALUES = {
+    text: "",
+    number: 0,
+    "true/false": false,
+    object: {},
+    list: [],
+  };
 
   function plural(n, word) {
     return n + " " + word + (n === 1 ? "" : "s");
@@ -195,6 +209,7 @@
 
     document.addEventListener("keydown", (e) => {
       if (opts.search && e.target === opts.search.input) return;
+      if (e.target.classList && e.target.classList.contains("keyinput")) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
@@ -206,6 +221,111 @@
     });
 
     document.addEventListener("focusout", flushEdits);
+
+    /* ════════════════  adding, renaming, deleting and copying fields  ════════════════ */
+
+    /** Change keys in some files: snapshot, change, re-render, save right away */
+    function structural(sides, mutate) {
+      beforeEdit();
+      mutate();
+      rerender();
+      sides.forEach(notifyEdit);
+      flushEdits();
+    }
+
+    /** Folds below `from` follow a renamed field to `to` */
+    function movePathState(from, to) {
+      [expanded, collapsed].forEach((set) => {
+        Array.from(set).forEach((id) => {
+          const p = JSON.parse(id);
+          if (p.length < from.length || !from.every((k, i) => p[i] === k)) return;
+          set.delete(id);
+          set.add(pathId(to.concat(p.slice(from.length))));
+        });
+      });
+    }
+
+    /** Sides whose object at parentPath has `key` */
+    function sidesWithKey(parentPath, key) {
+      return shown.filter((side) => {
+        const parent = lookup(side, parentPath);
+        return isPlainObject(parent) && has(parent, key);
+      });
+    }
+
+    /** Rename a field in every file that has it; returns an error message, or null */
+    function renameField(path, to) {
+      const parentPath = path.slice(0, -1);
+      const from = path[path.length - 1];
+      if (to === from) return null;
+      if (to === "") return "Enter a name.";
+      const sides = sidesWithKey(parentPath, from);
+      if (sides.some((side) => has(lookup(side, parentPath), to))) return 'There already is a field "' + to + '".';
+      structural(sides, () => {
+        sides.forEach((side) => {
+          const parent = lookup(side, parentPath);
+          setEntries(parent, Object.entries(parent).map(([k, v]) => [k === from ? to : k, v]));
+        });
+        movePathState(path, parentPath.concat(to));
+      });
+      return null;
+    }
+
+    function deleteField(side, path) {
+      const key = path[path.length - 1];
+      structural([side], () => delete lookup(side, path.slice(0, -1))[key]);
+      opts.toast('Deleted "' + key + '" (Ctrl+Z to undo)');
+    }
+
+    /** Add a field at the end of an object; returns an error message, or null */
+    function addField(side, parentPath, name, value) {
+      const parent = lookup(side, parentPath);
+      if (name === "") return "Enter a name.";
+      if (has(parent, name)) return 'There already is a field "' + name + '".';
+      const path = parentPath.concat(name);
+      structural([side], () => {
+        parent[name] = value;
+        if (isContainer(value)) expanded.add(pathId(path));
+      });
+      const row = elementFor(path);
+      const input = row && row.querySelector(compare ? 'input[data-side="' + side + '"]' : "input");
+      if (input && !input.disabled) input.focus();
+      return null;
+    }
+
+    /** Can the value at `path` be copied from one file to the other? */
+    function canCopy(from, to, path) {
+      const value = lookup(from, path);
+      const target = lookup(to, path.slice(0, -1));
+      const key = path[path.length - 1];
+      const fits = isPlainObject(target) || (Array.isArray(target) && key <= target.length);
+      return value !== MISSING && fits && !deepEqual(value, lookup(to, path));
+    }
+
+    /** Copy a value or a whole section to the other file, replacing what is there */
+    function copyAcross(from, to, path) {
+      const parentPath = path.slice(0, -1);
+      const key = path[path.length - 1];
+      const value = JSON.parse(JSON.stringify(lookup(from, path)));
+      const target = lookup(to, parentPath);
+      structural([to], () => {
+        if (Array.isArray(target) || has(target, key)) {
+          target[key] = value;
+          return;
+        }
+        // put it after the nearest field before it in the source that the target also has
+        const order = Object.keys(lookup(from, parentPath));
+        const before = order.slice(0, order.indexOf(key)).reverse().find((k) => has(target, k));
+        const entries = Object.entries(target);
+        entries.splice(before === undefined ? 0 : entries.findIndex(([k]) => k === before) + 1, 0, [key, value]);
+        setEntries(target, entries);
+      });
+    }
+
+    function elementFor(path) {
+      const id = pathId(path);
+      return Array.from(container.querySelectorAll("[data-path]")).find((el) => el.getAttribute("data-path") === id);
+    }
 
     /* ════════════════  building blocks  ════════════════ */
 
@@ -254,8 +374,175 @@
       }
       b.textContent = label;
       b.title = title;
-      b.addEventListener("click", onClick);
+      b.addEventListener("click", (e) => {
+        e.preventDefault(); // inside a <summary>, don't fold
+        e.stopPropagation();
+        onClick();
+      });
       return b;
+    }
+
+    /** A field name; fields of objects get a rename button */
+    function keyLabel(tag, className, label, path) {
+      const el = document.createElement(tag);
+      el.className = className;
+      const text = document.createElement("span");
+      text.textContent = label;
+      el.appendChild(text);
+      const key = path[path.length - 1];
+      if (typeof key === "string" && sidesWithKey(path.slice(0, -1), key).length) {
+        const rename = iconButton("✎", "Rename field", () => startRename(el, path));
+        rename.classList.add("rename");
+        el.appendChild(rename);
+      }
+      return el;
+    }
+
+    /** Edit a field name in place: Enter or leaving the field renames, Esc cancels */
+    function startRename(keyEl, path) {
+      const before = Array.from(keyEl.childNodes);
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "keyinput";
+      input.value = path[path.length - 1];
+      keyEl.replaceChildren(input);
+      input.focus();
+      input.select();
+
+      let done = false;
+      const finish = (commit, onError) => {
+        if (done) return;
+        const error = commit ? renameField(path, input.value) : null;
+        if (error && onError === "keep") {
+          input.classList.add("invalid");
+          input.title = error;
+          opts.toast(error);
+          return;
+        }
+        if (error) opts.toast(error);
+        done = true;
+        // a successful rename re-renders the tree; otherwise put the label back
+        if (keyEl.isConnected) keyEl.replaceChildren(...before);
+      };
+      input.addEventListener("click", (e) => e.preventDefault()); // inside a <summary>, don't fold
+      input.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finish(true, "keep");
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+      input.addEventListener("input", () => input.classList.remove("invalid"));
+      input.addEventListener("blur", () => finish(true, "cancel"));
+    }
+
+    /** Buttons for one file's value: copy it to the other file (compare), delete it */
+    function sideTools(side, path) {
+      const el = document.createElement("span");
+      el.className = "tools";
+      const here = lookup(side, path);
+      if (compare) {
+        const other = 1 - side;
+        el.appendChild(
+          canCopy(side, other, path)
+            ? iconButton(side === 0 ? "→" : "←", "Copy to the " + (side === 0 ? "right" : "left") + " file", () =>
+                copyAcross(side, other, path)
+              )
+            : iconButton()
+        );
+      }
+      const deletable = here !== MISSING && isPlainObject(lookup(side, path.slice(0, -1)));
+      el.appendChild(
+        deletable
+          ? iconButton("×", compare ? "Delete from this file" : "Delete field", () => deleteField(side, path))
+          : iconButton()
+      );
+      return el;
+    }
+
+    /** "+ add field" at the end of an object, per file; opens a small form for name and type */
+    function addFieldRow(container, path, depth) {
+      const row = document.createElement("div");
+      row.className = "row addrow";
+      row.style.setProperty("--depth", depth);
+
+      function addButton(side) {
+        const b = document.createElement("button");
+        b.className = "ghost addfield";
+        b.textContent = "+ add field";
+        b.title = compare ? "Add a field to this file" : "Add a field";
+        b.addEventListener("click", () => openForm(side));
+        return b;
+      }
+
+      function showButtons() {
+        const label = document.createElement("div");
+        label.className = "key";
+        row.replaceChildren(label);
+        if (!compare) {
+          label.appendChild(addButton(0));
+          return;
+        }
+        shown.forEach((side) => {
+          const cell = document.createElement("div");
+          cell.className = "vcell";
+          if (isPlainObject(lookup(side, path))) cell.appendChild(addButton(side));
+          row.appendChild(cell);
+        });
+      }
+
+      function openForm(side) {
+        const name = document.createElement("input");
+        name.type = "text";
+        name.className = "keyinput";
+        name.placeholder = "field name";
+        const type = document.createElement("select");
+        type.title = "Type of the new field";
+        Object.keys(NEW_VALUES).forEach((t) => type.add(new Option(t, t)));
+
+        const submit = () => {
+          const value = JSON.parse(JSON.stringify(NEW_VALUES[type.value]));
+          const error = addField(side, path, name.value, value);
+          if (error) {
+            name.classList.add("invalid");
+            name.title = error;
+            opts.toast(error);
+            name.focus();
+          }
+        };
+        const onKey = (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            showButtons();
+          }
+        };
+        name.addEventListener("keydown", onKey);
+        type.addEventListener("keydown", onKey);
+        name.addEventListener("input", () => name.classList.remove("invalid"));
+
+        const label = document.createElement("div");
+        label.className = "key";
+        label.appendChild(name);
+        row.replaceChildren(label);
+        shown.forEach((s) => {
+          const cell = document.createElement("div");
+          cell.className = "vcell";
+          if (s === side) {
+            cell.append(type, iconButton("✓", "Add field (Enter)", submit), iconButton("✕", "Cancel (Esc)", showButtons));
+          }
+          row.appendChild(cell);
+        });
+        name.focus();
+      }
+
+      showButtons();
+      container.appendChild(row);
     }
 
     function isOpen(id, byDefault) {
@@ -263,13 +550,22 @@
     }
 
     /** A foldable node; its body is built the first time it opens */
-    function foldable(container, id, depth, keyHtml, badgeText, build, openByDefault) {
+    function foldable(container, path, depth, label, keyClass, badgeText, build, openByDefault) {
+      const id = pathId(path);
       const wrap = document.createElement("details");
       wrap.setAttribute("data-path", id);
       wrap.classList.add("depth-" + (depth % 5));
+      wrap.style.setProperty("--depth", depth);
+      const head = document.createElement("span");
+      head.className = "sumhead";
+      head.innerHTML = '<span class="arrow">▸</span>';
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = badgeText;
+      head.append(keyLabel("span", keyClass, label, path), badge);
       const summary = document.createElement("summary");
-      summary.innerHTML =
-        '<span class="arrow">▸</span>' + keyHtml + '<span class="badge">' + esc(badgeText) + "</span>";
+      summary.appendChild(head);
+      shown.forEach((side) => summary.appendChild(sideTools(side, path)));
       wrap.appendChild(summary);
 
       let built = false;
@@ -305,18 +601,20 @@
       row.className = "row";
       row.setAttribute("data-path", pathId(path));
       row.style.setProperty("--depth", depth);
-      const label = document.createElement("div");
-      label.className = "key depth-" + (depth % 5);
-      label.textContent = key;
-      row.appendChild(label);
-      shown.forEach((side) =>
-        row.appendChild(valueInput(side, lookup(side, path), (v) => setAtPath(data[side], path, v)))
-      );
+      row.appendChild(keyLabel("div", "key depth-" + (depth % 5), key, path));
+      shown.forEach((side) => {
+        const cell = document.createElement("div");
+        cell.className = "vcell";
+        cell.append(
+          valueInput(side, lookup(side, path), (v) => setAtPath(data[side], path, v)),
+          sideTools(side, path)
+        );
+        row.appendChild(cell);
+      });
       container.appendChild(row);
     }
 
     function renderList(container, key, path, depth) {
-      const id = pathId(path);
       const body = document.createElement("div");
       body.className = "arrwrap";
 
@@ -400,8 +698,7 @@
         wrap.appendChild(body);
       }
 
-      const keyHtml = '<span class="key leaf-key">' + esc(key) + "</span>";
-      const wrap = foldable(container, id, depth, keyHtml, compare ? "" : countText(), build, false);
+      const wrap = foldable(container, path, depth, key, "key leaf-key", compare ? "" : countText(), build, false);
       wrap.classList.add("leaf-array");
     }
 
@@ -459,7 +756,6 @@
     }
 
     function renderMatrix(container, key, path, depth) {
-      const id = pathId(path);
       const defs = valuesAt(path);
       const first = defs.find((d) => d !== MISSING);
       const body = document.createElement("div");
@@ -481,13 +777,11 @@
         wrap.appendChild(body);
       }
 
-      const keyHtml = '<span class="key">' + esc(key) + "</span>";
       const badge = compare ? "" : first.labels_rows.length + "×" + first.labels_cols.length;
-      foldable(container, id, depth, keyHtml, badge, build, true);
+      foldable(container, path, depth, key, "key", badge, build, true);
     }
 
     function renderBranch(container, key, path, depth, kind) {
-      const id = pathId(path);
       const childrenEl = document.createElement("div");
       childrenEl.className = "children";
 
@@ -501,8 +795,7 @@
         const v = lookup(0, path);
         badge = kind === "array" ? v.length + " items" : plural(Object.keys(v).length, "field");
       }
-      const keyHtml = '<span class="key">' + esc(key) + "</span>";
-      foldable(container, id, depth, keyHtml, badge, build, statusOf(path) === "changed");
+      foldable(container, path, depth, key, "key", badge, build, statusOf(path) === "changed");
     }
 
     function renderEntry(container, key, path, depth) {
@@ -521,6 +814,7 @@
         if (onlyDiff && statusOf(childPath) === "same") return;
         renderEntry(container, array ? "[" + k + "]" : k, childPath, depth);
       });
+      if (shown.some((side) => isPlainObject(lookup(side, path)))) addFieldRow(container, path, depth);
     }
 
     /** Status classes and difference counts, updated in place so editing keeps focus */
@@ -628,6 +922,7 @@
       const query = searchEl.value;
       const active = query.trim() !== "";
 
+      container.classList.toggle("searching", active);
       if (active && !preSearchOpen) preSearchOpen = snapshotOpenState();
       if (!active && preSearchOpen) restorePreSearchState();
 
