@@ -227,3 +227,61 @@ th.hit-current,td.hit-current:not(:has(input)){
   background:var(--vscode-editor-findMatchBackground, rgba(81,92,106,.6));
   outline:1px solid var(--vscode-editor-findMatchBorder, var(--vscode-focusBorder));
 }
+
+/* ── compare view ── */
+main.compare{max-width:none}
+.cmp-toggle{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none}
+.cmp-toggle input{accent-color:var(--vscode-notificationsInfoIcon-foreground, #007acc)}
+.cmp-empty{color:var(--vscode-descriptionForeground);padding-left:26px}
+#summary{font-size:12px;color:var(--vscode-descriptionForeground)}
+#summary span{color:var(--status)}
+
+/* file names above the value columns */
+.cmp-head{
+  position:sticky;top:-16px;z-index:1;display:grid;grid-template-columns:240px 1fr 1fr;gap:8px;
+  background:var(--vscode-editor-background);
+  border-bottom:1px solid var(--vscode-editorWidget-border, var(--vscode-input-border));
+  margin-bottom:6px;padding:8px 8px 8px 26px;
+}
+.cmp-head a{color:var(--vscode-textLink-foreground);text-decoration:none;font-weight:600;overflow-wrap:anywhere}
+.cmp-head a:hover{text-decoration:underline}
+
+/*
+ * key | left | right. Nesting indents a row by 20px per level, so the key column
+ * shrinks by the same amount to keep the value columns lined up at every depth.
+ * List entries and matrices sit 4px further in (their <details> border and margin).
+ */
+.columns .row{display:grid;grid-template-columns:calc(240px - var(--depth, 0) * 20px) 1fr 1fr}
+.columns .row .key{min-width:0}
+.columns .arritem,
+.columns .mtables{display:grid;grid-template-columns:calc(236px - var(--depth, 0) * 20px) 1fr 1fr;gap:8px}
+.columns .arritem::before,
+.columns .mtables::before{content:""}
+.mtables{padding:4px 8px 8px 26px}
+.mslot{min-width:0;overflow-x:auto}
+.mtables table.matrix{margin:0}
+
+/* a field this file doesn't have */
+input.ghost{opacity:.4;border-style:dashed;background:transparent}
+input[type=text]:disabled:not(.ghost){opacity:.75}
+
+/* differences */
+.status-changed{--status:var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d)}
+.status-added{--status:var(--vscode-gitDecoration-addedResourceForeground, #81b88b)}
+.status-removed{--status:var(--vscode-gitDecoration-deletedResourceForeground, #c74e39)}
+.row.status-changed,.row.status-added,.row.status-removed,
+.arritem.status-changed,.arritem.status-added,.arritem.status-removed{box-shadow:inset 3px 0 0 var(--status);border-radius:4px}
+:is(.status-changed,.status-removed) > input[data-side="0"],
+:is(.status-changed,.status-removed) > .arrcell > input[data-side="0"]{
+  background:var(--vscode-diffEditor-removedTextBackground, rgba(255,0,0,.2));
+}
+:is(.status-changed,.status-added) > input[data-side="1"],
+:is(.status-changed,.status-added) > .arrcell > input[data-side="1"]{
+  background:var(--vscode-diffEditor-insertedTextBackground, rgba(155,185,85,.2));
+}
+td:is(.status-changed,.status-added,.status-removed) > input[type=checkbox]{outline:2px solid var(--status);outline-offset:1px}
+th:is(.status-changed,.status-added,.status-removed),
+td.rowlabel:is(.status-changed,.status-added,.status-removed){color:var(--status)}
+details:is(.status-changed,.status-added,.status-removed) > summary .badge{
+  background:transparent;color:var(--status);border:1px solid var(--status);
+}

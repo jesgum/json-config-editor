@@ -2,7 +2,7 @@
   "name": "json-config-editor",
   "displayName": "JSON Config Editor",
   "description": "Tree-view editor for large nested JSON configs",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "jesgum",
   "license": "MIT",
   "repository": {
@@ -31,6 +31,21 @@
         "command": "jsonConfigEditor.open",
         "title": "Open JSON Config Editor",
         "category": "JSON Config Editor"
+      },
+      {
+        "command": "jsonConfigEditor.selectForCompare",
+        "title": "Select for Compare (JSON Config)",
+        "category": "JSON Config Editor"
+      },
+      {
+        "command": "jsonConfigEditor.compareWithSelected",
+        "title": "Compare with Selected (JSON Config)",
+        "category": "JSON Config Editor"
+      },
+      {
+        "command": "jsonConfigEditor.compareSelected",
+        "title": "Compare Selected (JSON Config)",
+        "category": "JSON Config Editor"
       }
     ],
     "menus": {
@@ -39,6 +54,45 @@
           "when": "resourceLangId == json || resourceLangId == jsonc",
           "command": "jsonConfigEditor.open",
           "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "jsonConfigEditor.selectForCompare",
+          "when": "!explorerResourceIsFolder && (resourceExtname == .json || resourceExtname == .jsonc) && !listMultiSelection",
+          "group": "3_compare@30"
+        },
+        {
+          "command": "jsonConfigEditor.compareWithSelected",
+          "when": "!explorerResourceIsFolder && (resourceExtname == .json || resourceExtname == .jsonc) && jsonConfigEditor.selectedForCompare && !listMultiSelection",
+          "group": "3_compare@31"
+        },
+        {
+          "command": "jsonConfigEditor.compareSelected",
+          "when": "!explorerResourceIsFolder && (resourceExtname == .json || resourceExtname == .jsonc) && listDoubleSelection",
+          "group": "3_compare@32"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "jsonConfigEditor.selectForCompare",
+          "when": "(resourceExtname == .json || resourceExtname == .jsonc)",
+          "group": "3_compare@30"
+        },
+        {
+          "command": "jsonConfigEditor.compareWithSelected",
+          "when": "(resourceExtname == .json || resourceExtname == .jsonc) && jsonConfigEditor.selectedForCompare",
+          "group": "3_compare@31"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "jsonConfigEditor.compareWithSelected",
+          "when": "jsonConfigEditor.selectedForCompare"
+        },
+        {
+          "command": "jsonConfigEditor.compareSelected",
+          "when": "false"
         }
       ]
     },

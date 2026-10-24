@@ -2,8 +2,10 @@ import * as vscode from "vscode";
 import { randomBytes } from "crypto";
 import { parseDocument } from "./jsonEdit";
 import { dataEdit } from "./documentEdit";
+import { openComparePanel } from "./compare";
 
 let isRedirecting = false;
+let selectedForCompare: vscode.Uri | undefined;
 
 export function activate(ctx: vscode.ExtensionContext) {
   const provider = new ConfigEditorProvider(ctx);
@@ -30,6 +32,60 @@ export function activate(ctx: vscode.ExtensionContext) {
       await openCustomEditor(target, vscode.window.activeTextEditor?.viewColumn);
     })
   );
+
+  const compare = (left: vscode.Uri, right: vscode.Uri) =>
+    openComparePanel(ctx, left, right, (uri) => openCustomEditor(uri, vscode.ViewColumn.Beside));
+
+  ctx.subscriptions.push(
+    vscode.commands.registerCommand("jsonConfigEditor.selectForCompare", async (uri?: vscode.Uri) => {
+      const target = jsonTarget(uri);
+      if (!target) { return; }
+      selectedForCompare = target;
+      await vscode.commands.executeCommand("setContext", "jsonConfigEditor.selectedForCompare", true);
+    }),
+
+    vscode.commands.registerCommand("jsonConfigEditor.compareWithSelected", (uri?: vscode.Uri) => {
+      const target = jsonTarget(uri);
+      if (!target) { return; }
+      if (!selectedForCompare) {
+        vscode.window.showWarningMessage("Select a JSON file for compare first.");
+        return;
+      }
+      if (selectedForCompare.toString() === target.toString()) {
+        vscode.window.showWarningMessage("Pick a different file than the one selected for compare.");
+        return;
+      }
+      compare(selectedForCompare, target);
+    }),
+
+    // explorer multi-select: (clicked item, all selected items)
+    vscode.commands.registerCommand("jsonConfigEditor.compareSelected", (_uri?: vscode.Uri, uris?: vscode.Uri[]) => {
+      if (uris?.length !== 2 || !uris.every(isJsonFile)) {
+        vscode.window.showWarningMessage("Select exactly two .json or .jsonc files to compare.");
+        return;
+      }
+      compare(uris[0], uris[1]);
+    })
+  );
+}
+
+/** The file a command was run on (explorer or tab context menu), else the active editor's file */
+function jsonTarget(uri?: vscode.Uri): vscode.Uri | undefined {
+  const target = uri ?? activeTabUri();
+  if (!target) {
+    vscode.window.showWarningMessage("Open a JSON file first.");
+    return undefined;
+  }
+  if (!isJsonFile(target)) {
+    vscode.window.showWarningMessage("JSON Config Editor only works with .json and .jsonc files.");
+    return undefined;
+  }
+  return target;
+}
+
+function activeTabUri(): vscode.Uri | undefined {
+  const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+  return (tab && getUriFromTab(tab)) ?? vscode.window.activeTextEditor?.document.uri;
 }
 
 function isJsonFile(uri: vscode.Uri): boolean {
