@@ -1,9 +1,11 @@
 import {
   applyEdits,
+  findNodeAtLocation,
   FormattingOptions,
   JSONPath,
   modify,
   parse,
+  parseTree,
   ParseError,
   printParseErrorCode,
 } from "jsonc-parser";
@@ -51,6 +53,8 @@ export function detectFormatting(text: string): FormattingOptions {
  * Rewrite `text` so it represents `newData`, touching only the values that differ from
  * `oldData` (the parsed form of `text`). Comments, formatting and untouched values,
  * including numbers too large for a JS double, are left exactly as they were.
+ * New keys are placed after the key that precedes them in `newData`, and a key replaced
+ * by a new name holding the same value at the same position is renamed in place.
  */
 export function applyDataChange(
   text: string,
@@ -62,21 +66,59 @@ export function applyDataChange(
     text = applyEdits(text, modify(text, path, value, { formattingOptions }));
   };
 
+  const insert = (path: JSONPath, key: string, value: unknown, order: string[]) => {
+    const before = order.slice(0, order.indexOf(key));
+    const getInsertionIndex = (properties: string[]) => {
+      for (let i = before.length - 1; i >= 0; i--) {
+        const at = properties.indexOf(before[i]);
+        if (at >= 0) {
+          return at + 1;
+        }
+      }
+      return 0;
+    };
+    text = applyEdits(text, modify(text, path.concat(key), value, { formattingOptions, getInsertionIndex }));
+  };
+
+  // rewrite only the key, so comments and formatting inside its value survive
+  const rename = (path: JSONPath, from: string, to: string, value: unknown, order: string[]) => {
+    const tree = parseTree(text, [], { allowTrailingComma: true });
+    const keyNode = tree && findNodeAtLocation(tree, path.concat(from))?.parent?.children?.[0];
+    if (!keyNode) {
+      set(path.concat(from), undefined);
+      insert(path, to, value, order);
+      return;
+    }
+    text = text.slice(0, keyNode.offset) + JSON.stringify(to) + text.slice(keyNode.offset + keyNode.length);
+  };
+
   const walk = (path: JSONPath, a: unknown, b: unknown) => {
     if (deepEqual(a, b)) {
       return;
     }
     if (isObject(a) && isObject(b)) {
-      for (const k of Object.keys(a)) {
-        if (!hasOwn(b, k)) {
+      const aKeys = Object.keys(a);
+      const bKeys = Object.keys(b);
+      const renamedFrom = new Set<string>();
+      const renamedTo = new Set<string>();
+      aKeys.forEach((k, i) => {
+        const to = bKeys[i];
+        if (!hasOwn(b, k) && to !== undefined && !hasOwn(a, to) && deepEqual(a[k], b[to])) {
+          rename(path, k, to, b[to], bKeys);
+          renamedFrom.add(k);
+          renamedTo.add(to);
+        }
+      });
+      for (const k of aKeys) {
+        if (!hasOwn(b, k) && !renamedFrom.has(k)) {
           set(path.concat(k), undefined);
         }
       }
-      for (const k of Object.keys(b)) {
+      for (const k of bKeys) {
         if (hasOwn(a, k)) {
           walk(path.concat(k), a[k], b[k]);
-        } else {
-          set(path.concat(k), b[k]);
+        } else if (!renamedTo.has(k)) {
+          insert(path, k, b[k], bKeys);
         }
       }
       return;

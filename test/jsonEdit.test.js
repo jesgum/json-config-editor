@@ -83,3 +83,34 @@ test("deepEqual", () => {
   assert.ok(!deepEqual({ a: 1 }, { a: 1, b: undefined }));
   assert.ok(!deepEqual([1], { 0: 1 }));
 });
+
+test("a renamed key keeps its place, comments and formatting", () => {
+  const text = '{\n  "a": 1,\n  // the server\n  "srv": {\n    "port": 80 // http\n  },\n  "z": 2\n}';
+  const out = edit(text, (d) => {
+    const { a, srv, z } = d;
+    for (const k of Object.keys(d)) delete d[k];
+    Object.assign(d, { a, server: srv, z });
+  });
+  assert.equal(out, text.replace('"srv"', '"server"'));
+});
+
+test("new keys go after the key that precedes them", () => {
+  const text = '{\n  "a": 1,\n  "c": 3\n}';
+  const out = edit(text, (d) => {
+    const { a, c } = d;
+    delete d.a;
+    delete d.c;
+    Object.assign(d, { first: 0, a, b: 2, c, last: 9 });
+  });
+  assert.deepEqual(Object.keys(parseDocument(out).data), ["first", "a", "b", "c", "last"]);
+  assert.ok(out.includes('"a": 1,\n  "b": 2,\n  "c": 3'));
+});
+
+test("deleting a key and adding a different one is not a rename", () => {
+  const text = '{\n  "a": 1,\n  "b": 2\n}';
+  const out = edit(text, (d) => {
+    delete d.a;
+    d.x = 5;
+  });
+  assert.deepEqual(parseDocument(out).data, { b: 2, x: 5 });
+});
